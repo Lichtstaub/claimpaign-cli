@@ -127,6 +127,19 @@ describe('balance', () => {
     expect(output.join('')).toContain(hugeAmount);
   });
 
+  it('strips control characters from an asset name before printing the table', async () => {
+    await api.close();
+    api = await startFakeApi({
+      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
+      'GET /api/org/wallet': () => ({
+        status: 200,
+        body: { ...WALLET_BODY, tokens: [{ ...WALLET_BODY.tokens[0], assetNameUtf8: '\u0000\u0014\ufffd\u0010tUSDM', platform: false }] },
+      }),
+    });
+    await balance({ api: api.url, json: false });
+    expect(output.join('')).toMatch(/^tUSDM\s/m);
+  });
+
   it('prints the raw credits and wallet bodies as json', async () => {
     await balance({ api: api.url, json: true });
     const parsed = JSON.parse(output.join(''));
