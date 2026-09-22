@@ -4,6 +4,7 @@ import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
 import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
+import { campaignCreate, campaignList, campaignStatus } from './commands/campaign.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -47,11 +48,58 @@ export function buildProgram(): Command {
       await deposit({ api: opts.api, json: opts.json });
     });
 
-  program
+  const campaign = program
     .command('campaign')
-    .description('Manage sandbox campaigns')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .description('Manage sandbox campaigns');
+
+  campaign
+    .command('create')
+    .description('Create a sandbox campaign and export its codes')
+    .requiredOption('--name <text>', 'campaign name')
+    .requiredOption('--claims <n>', 'number of claim codes')
+    .option('--ada <tADA>', 'ada per claim, in tADA')
+    .option('--token <policy.assethex:qty>', 'token bundle item, repeatable', (value: string, previous: string[]) => [...previous, value], [] as string[])
+    .option('--shared', 'one shared code for every claim', false)
+    .option('--prefix <PREFIX>', 'claim code prefix, derived from the name when omitted')
+    .option('--expires <ISO>', 'expiry timestamp')
+    .option('--description <text>', 'campaign description')
+    .option('--out <dir>', 'directory for the exported codes CSV (default the current directory)')
+    .option('--fresh', 'discard a pending creation attempt and start a new one', false)
+    .action(async (cmdOpts: {
+      name: string; claims: string; ada?: string; token: string[]; shared: boolean;
+      prefix?: string; expires?: string; description?: string; out?: string; fresh: boolean;
+    }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignCreate({
+        api: opts.api,
+        json: opts.json,
+        name: cmdOpts.name,
+        claims: Number(cmdOpts.claims),
+        ada: cmdOpts.ada !== undefined ? Number(cmdOpts.ada) : undefined,
+        token: cmdOpts.token,
+        shared: cmdOpts.shared,
+        prefix: cmdOpts.prefix,
+        expires: cmdOpts.expires,
+        description: cmdOpts.description,
+        out: cmdOpts.out,
+        fresh: cmdOpts.fresh,
+      });
+    });
+
+  campaign
+    .command('list')
+    .description('List sandbox campaigns')
+    .action(async () => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignList({ api: opts.api, json: opts.json });
+    });
+
+  campaign
+    .command('status <id>')
+    .description('Show a sandbox campaign\'s status, progress and claim queue')
+    .action(async (id: string) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignStatus(id, { api: opts.api, json: opts.json });
     });
 
   program
