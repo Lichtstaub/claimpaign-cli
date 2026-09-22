@@ -12,7 +12,8 @@ import type { CampaignCode, CampaignFields, CampaignGetResponseBody } from '../a
  */
 const MAX_PAGES = 1000;
 
-const CSV_COLUMNS = ['code', 'status', 'claim_uri', 'fallback_url'];
+/** Shared with campaign.ts, so a freshly created campaign's CSV lines up with campaign codes. */
+export const CSV_COLUMNS = ['code', 'status', 'claim_uri', 'fallback_url'];
 
 /**
  * Fetches every page of a campaign's codes and deduplicates by code (shared campaigns

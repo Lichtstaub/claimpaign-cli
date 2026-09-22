@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -52,6 +52,7 @@ describe('login and logout through the cli', () => {
     });
   });
   afterAll(async () => { await api.close(); });
+  afterEach(() => { expect(api.errors, 'fake api handler threw').toEqual([]); });
 
   it('logs in with a good key piped on stdin and never echoes it', async () => {
     await withDir(async dir => {
@@ -90,6 +91,14 @@ describe('login and logout through the cli', () => {
       expect(r.signal).toBeNull();
       expect(r.stdout.trim()).toBe('Logged out.');
       expect(readConfigFile(dir)).toEqual({ api: api.url });
+    });
+  });
+
+  it('exits 2 for balance with no token and an empty config', async () => {
+    await withDir(async dir => {
+      const r = await runCli(['balance'], '', dir);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('Not logged in');
     });
   });
 });

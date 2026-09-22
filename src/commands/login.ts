@@ -1,6 +1,6 @@
 import { writeConfig, resolveApi } from '../config.js';
 import { apiRequest, ApiError } from '../api.js';
-import { CancelledError } from '../output.js';
+import { CancelledError, UsageError } from '../output.js';
 
 /**
  * Prompt for a secret without echo. A TTY delivers raw chunks that may hold a pasted
@@ -44,7 +44,7 @@ export function promptSecret(question: string, input: SecretInput = process.stdi
 export async function login(opts: { api?: string; token?: string; json: boolean }): Promise<void> {
   const api = resolveApi(opts.api);
   const token = opts.token ?? await promptSecret('Paste your sandbox API key (from Settings, Sandbox API): ');
-  if (!/^cps_[a-z2-9]{40}$/.test(token)) throw new Error('That does not look like a Claimpaign sandbox key (cps_ followed by 40 characters)');
+  if (!/^cps_[a-z2-9]{40}$/.test(token)) throw new UsageError('That does not look like a Claimpaign sandbox key (cps_ followed by 40 characters)');
   try {
     await apiRequest({ api, token, method: 'GET', path: '/api/org/credits' });
   } catch (err) {

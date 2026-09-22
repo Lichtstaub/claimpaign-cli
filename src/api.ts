@@ -1,4 +1,5 @@
 import { resolveToken } from './config.js';
+import { UsageError } from './output.js';
 
 export interface ApiRequestOptions {
   api: string;
@@ -97,6 +98,6 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
 
 export function requireToken(): string {
   const token = resolveToken();
-  if (!token) throw new Error('Not logged in. Run: claimpaign login');
+  if (!token) throw new UsageError('Not logged in. Run: claimpaign login');
   return token;
 }

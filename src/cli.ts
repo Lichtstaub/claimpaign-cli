@@ -44,7 +44,7 @@ export function buildProgram(): Command {
 
   program
     .command('deposit')
-    .description('Add sandbox credits to the organization')
+    .description('Show the organization wallet address and how to add credits')
     .action(async () => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await deposit({ api: opts.api, json: opts.json });

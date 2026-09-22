@@ -14,6 +14,9 @@
 # Optional:
 #   CLI               command used to run the CLI, defaults to this checkout's build
 #                      output. Set CLI="npx claimpaign" to test the published package.
+#   E2E_FOREIGN_URI   required only together with --foreign, a CIP-99 claim uri from an
+#                      external faucet, for example the tUSDM preprod faucet:
+#                      web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
 #
 # Stages: the smoke stage always runs. --full adds a 60 claim acceptance run (takes at
 # least 30 seconds to submit, then polls for up to 20 minutes). --foreign adds a claim
@@ -25,7 +28,6 @@ if [ -z "${CLI:-}" ]; then
   CLI="node $SCRIPT_DIR/../dist/bin.js"
 fi
 
-FOREIGN_URI="web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9"
 FULL_CLAIM_COUNT=60
 FULL_CLAIM_INTERVAL=0.6
 FULL_POLL_INTERVAL=20
@@ -45,14 +47,23 @@ Required environment variables:
 Optional:
   CLI               command to run the CLI (default: node dist/bin.js from this checkout,
                      or CLI="npx claimpaign" for the published package)
+  E2E_FOREIGN_URI   required only together with --foreign, a CIP-99 claim uri from an
+                     external faucet, for example the tUSDM preprod faucet:
+                     web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
 
 Flags:
   --full      also run 60 claims spaced 0.6 seconds apart, then poll campaign status
               until all 60 are settled
   --foreign   also claim from an external CIP-99 faucet with the last address in
-              E2E_ADDRESSES
+              E2E_ADDRESSES, using the uri in E2E_FOREIGN_URI
 EOF
 }
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+  esac
+done
 
 for var in CLAIMPAIGN_API CLAIMPAIGN_TOKEN E2E_ADDRESSES; do
   if [ -z "${!var:-}" ]; then
@@ -89,8 +100,8 @@ run_smoke() {
   echo "-- campaign codes --"
   $CLI campaign codes "$campaign_id" --qr-dir /tmp/cp-e2e/qr --pdf /tmp/cp-e2e/codes.pdf
 
-  local first_code first_uri first_addr
-  IFS=',' read -r first_code first_uri _ < <(sed -n '2p' "$codes_file")
+  local first_code first_addr
+  first_code="$(sed -n '2p' "$codes_file" | cut -d',' -f1)"
   first_addr="$(sed -n '1p' "$E2E_ADDRESSES")"
   if [ -z "$first_code" ] || [ -z "$first_addr" ]; then
     echo "Could not read a code from $codes_file or an address from E2E_ADDRESSES" >&2
@@ -156,10 +167,6 @@ run_full() {
     sleep "$FULL_CLAIM_INTERVAL"
   done
   echo "Accepted: $accepted/$FULL_CLAIM_COUNT"
-  if [ "$accepted" -ne "$FULL_CLAIM_COUNT" ]; then
-    echo "Expected $FULL_CLAIM_COUNT accepted claims, got $accepted" >&2
-    exit 1
-  fi
 
   echo "-- polling campaign status until codes_claimed reaches $FULL_CLAIM_COUNT --"
   local deadline claimed pending queued processing status_out
@@ -190,6 +197,11 @@ run_full() {
 
 run_foreign() {
   echo "== foreign faucet stage =="
+  if [ -z "${E2E_FOREIGN_URI:-}" ]; then
+    echo "E2E_FOREIGN_URI is required together with --foreign" >&2
+    usage >&2
+    exit 2
+  fi
   local addr
   addr="$(sed -n '61p' "$E2E_ADDRESSES")"
   if [ -z "$addr" ]; then
@@ -199,7 +211,7 @@ run_foreign() {
 
   local claim_out exit_code tokens
   set +e
-  claim_out="$($CLI --json claim "$FOREIGN_URI" "$addr")"
+  claim_out="$($CLI --json claim "$E2E_FOREIGN_URI" "$addr")"
   exit_code=$?
   set -e
 

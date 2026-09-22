@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { startFakeApi, fakeKey } from './helpers/fake-api.js';
 import { balance } from '../src/commands/balance.js';
 import { deposit } from '../src/commands/deposit.js';
+import { UsageError } from '../src/output.js';
 
 const TOKEN = fakeKey('balance');
 
@@ -74,6 +75,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  expect(api.errors, 'fake api handler threw').toEqual([]);
   await api.close();
   rmSync(dir, { recursive: true, force: true });
   delete process.env.CLAIMPAIGN_CONFIG_DIR;
@@ -137,7 +139,9 @@ describe('balance', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(balance({ api: api.url, json: false })).rejects.toThrow('Not logged in');
+    const err = await balance({ api: api.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });
 
@@ -156,6 +160,8 @@ describe('deposit', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(deposit({ api: api.url, json: false })).rejects.toThrow('Not logged in');
+    const err = await deposit({ api: api.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });

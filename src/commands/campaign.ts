@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomInt, randomUUID, createHash } from 'node:crypto';
 import { apiRequest, ApiError, requireToken } from '../api.js';
 import { configDir, resolveApi } from '../config.js';
 import { print, table, UsageError } from '../output.js';
 import { buildClaimUri, buildFallbackUri, splitFullCode } from '../codes.js';
 import { writeCsv } from '../export.js';
-import { loadAllCodes } from './campaign-codes.js';
+import { loadAllCodes, CSV_COLUMNS } from './campaign-codes.js';
 import type {
   CampaignCreateRequestBody,
   CampaignCreateResponseBody,
@@ -18,7 +18,7 @@ import type {
 } from '../api-types.js';
 
 const PREFIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const TOKEN_ARG = /^([a-f0-9]{56})\.([a-f0-9]*):([0-9]+)$/;
+const TOKEN_ARG = /^([a-fA-F0-9]{56})\.([a-fA-F0-9]*):([0-9]+)$/;
 const DEFAULT_POLL_MS = 10_000;
 const DEFAULT_POLL_TIMEOUT_MS = 900_000;
 const DEFAULT_END_WAIT_MS = 20_000;
@@ -53,7 +53,7 @@ export interface CampaignCreateResult {
 interface PendingCreateEntry {
   key: string;
   api: string;
-  tokenPrefix: string;
+  tokenHash: string;
   body: CampaignCreateRequestBody;
   createdAt: string;
 }
@@ -62,14 +62,32 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** First 12 hex characters of sha256(token), enough to tell two keys apart without storing or printing any part of the key itself. */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 12);
+}
+
 function pendingPath(): string {
   return join(configDir(), 'pending-create.json');
 }
 
+/**
+ * Reads the pending entry, requiring the shape a resume depends on: a string key, api and
+ * tokenHash, and a body that is an object targeting preprod. Anything else, including an
+ * entry from before tokenHash existed, is treated as no entry, not as a match.
+ */
 function readPendingEntry(): PendingCreateEntry | undefined {
   try {
     const parsed = JSON.parse(readFileSync(pendingPath(), 'utf8'));
-    if (parsed && typeof parsed === 'object' && typeof parsed.key === 'string') return parsed as PendingCreateEntry;
+    if (
+      parsed && typeof parsed === 'object'
+      && typeof parsed.key === 'string'
+      && typeof parsed.api === 'string'
+      && typeof parsed.tokenHash === 'string'
+      && parsed.body && typeof parsed.body === 'object' && parsed.body.network === 'preprod'
+    ) {
+      return parsed as PendingCreateEntry;
+    }
     return undefined;
   } catch {
     return undefined;
@@ -78,6 +96,7 @@ function readPendingEntry(): PendingCreateEntry | undefined {
 
 function writePendingEntry(entry: PendingCreateEntry): void {
   if (!existsSync(configDir())) mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+  chmodSync(configDir(), 0o700);
   writeFileSync(pendingPath(), JSON.stringify(entry, null, 2) + '\n', { mode: 0o600 });
   chmodSync(pendingPath(), 0o600);
 }
@@ -105,7 +124,7 @@ function parseTokenArg(raw: string): TokenBundleItem {
     throw new UsageError(`Invalid --token value "${raw}", expected <policyId 56 hex>.<assetNameHex>:<quantity digits>`);
   }
   const [, policyId, assetNameHex, quantity] = match;
-  return { unit: `${policyId}.${assetNameHex}`, quantity };
+  return { unit: `${policyId}.${assetNameHex}`.toLowerCase(), quantity };
 }
 
 function buildRequestBody(opts: CampaignCreateOpts, prefix: string): CampaignCreateRequestBody {
@@ -123,9 +142,9 @@ function buildRequestBody(opts: CampaignCreateOpts, prefix: string): CampaignCre
   return body;
 }
 
-/** 400/403/404 are always final, 409 only when it names a creation_failed campaign. */
+/** 400/401/403/404/422 are always final, the request never reached campaign creation, 409 only when it names a creation_failed campaign. */
 function isDefinitiveRejection(status: number, body: unknown): boolean {
-  if (status === 400 || status === 403 || status === 404) return true;
+  if (status === 400 || status === 401 || status === 403 || status === 404 || status === 422) return true;
   if (status === 409) {
     const record = body as { error?: string; campaign?: { status?: string } } | undefined;
     if (record?.campaign?.status === 'creation_failed') return true;
@@ -142,10 +161,10 @@ function formatAda(lovelace: number): string {
  * Explains why a pending entry cannot be resumed, without ever printing any part of the
  * API key, only whether it differs.
  */
-function pendingMismatchMessage(pending: PendingCreateEntry, api: string, tokenPrefix: string): string {
+function pendingMismatchMessage(pending: PendingCreateEntry, api: string, tokenHash: string): string {
   const reasons: string[] = [];
   if (pending.api !== api) reasons.push(`the pending attempt targets ${pending.api}, this run targets ${api}`);
-  if (pending.tokenPrefix !== tokenPrefix) reasons.push('the pending attempt used a different API key');
+  if (pending.tokenHash !== tokenHash) reasons.push('the pending attempt used a different API key');
   return `A pending campaign creation exists, but ${reasons.join(' and ')}. Run with --fresh to start a new one.`;
 }
 
@@ -174,8 +193,6 @@ async function pollUntilActive(params: {
   }
 }
 
-const CREATE_CSV_COLUMNS = ['code', 'claim_uri', 'fallback_url'];
-
 /** Writes every code of a freshly created campaign to a CSV, using the page already fetched by pollUntilActive. Returns its path. */
 async function exportCodes(params: {
   api: string; token: string; campaignId: string; page1: CampaignGetResponseBody; outDir: string;
@@ -188,12 +205,12 @@ async function exportCodes(params: {
     const split = splitFullCode(c.code);
     const shortCode = split?.shortCode ?? c.code;
     const codePrefix = split?.prefix ?? prefix;
-    return { code: c.code, claim_uri: buildClaimUri(api, codePrefix, shortCode), fallback_url: buildFallbackUri(api, c.code) };
+    return { code: c.code, status: 'unclaimed', claim_uri: buildClaimUri(api, codePrefix, shortCode), fallback_url: buildFallbackUri(api, c.code) };
   });
 
   mkdirSync(outDir, { recursive: true });
   const csvPath = join(outDir, `${prefix}-codes.csv`);
-  writeCsv(csvPath, rows, CREATE_CSV_COLUMNS);
+  writeCsv(csvPath, rows, CSV_COLUMNS);
   return csvPath;
 }
 
@@ -204,11 +221,13 @@ async function exportCodes(params: {
  * until it either reaches active, is definitively rejected by the server, or --fresh
  * discards it. An existing pending attempt for the same api and API key is always
  * resumed with its original idempotency key and body, ignoring the options given now.
+ * Run one "campaign create" at a time, the pending entry is a single file and two
+ * parallel creations racing on it would produce two funded campaigns.
  */
 export async function campaignCreate(opts: CampaignCreateOpts): Promise<CampaignCreateResult> {
   const token = requireToken();
   const api = resolveApi(opts.api);
-  const tokenPrefix = token.slice(0, 12);
+  const tokenHash = hashToken(token);
   const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
   const pollTimeoutMs = opts.pollTimeoutMs ?? DEFAULT_POLL_TIMEOUT_MS;
 
@@ -222,8 +241,8 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
   let body: CampaignCreateRequestBody;
 
   if (pending) {
-    if (pending.api !== api || pending.tokenPrefix !== tokenPrefix) {
-      throw new UsageError(pendingMismatchMessage(pending, api, tokenPrefix));
+    if (pending.api !== api || pending.tokenHash !== tokenHash) {
+      throw new UsageError(pendingMismatchMessage(pending, api, tokenHash));
     }
     key = pending.key;
     body = pending.body;
@@ -236,7 +255,7 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
     const prefix = opts.prefix || derivePrefix(opts.name);
     body = buildRequestBody(opts, prefix);
     key = randomUUID();
-    writePendingEntry({ key, api, tokenPrefix, body, createdAt: new Date().toISOString() });
+    writePendingEntry({ key, api, tokenHash, body, createdAt: new Date().toISOString() });
   }
 
   let createBody: CampaignCreateResponseBody;

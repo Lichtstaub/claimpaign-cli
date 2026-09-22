@@ -16,7 +16,10 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  if (api) await api.close();
+  if (api) {
+    expect(api.errors, 'fake api handler threw').toEqual([]);
+    await api.close();
+  }
 });
 
 describe('claim', () => {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { startFakeApi, fakeKey, type FakeReq } from './helpers/fake-api.js';
 import { campaignCreate, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from '../src/commands/campaign.js';
 import { UsageError } from '../src/output.js';
@@ -9,6 +10,11 @@ import { ApiError } from '../src/api.js';
 
 const TOKEN = fakeKey('campaign');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Mirrors campaign.ts's own hashToken, first 12 hex characters of sha256(token). */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 12);
+}
 
 interface FakeCampaign {
   id: string;
@@ -95,7 +101,7 @@ function standardOnCreate(): OnCreate {
 let dir: string;
 let output: string[];
 let errOutput: string[];
-let fake: { close: () => Promise<void> } | undefined;
+let fake: Awaited<ReturnType<typeof startFakeApi>> | undefined;
 
 beforeEach(() => {
   output = [];
@@ -110,7 +116,10 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  if (fake) await fake.close();
+  if (fake) {
+    expect(fake.errors, 'fake api handler threw').toEqual([]);
+    await fake.close();
+  }
   rmSync(dir, { recursive: true, force: true });
   delete process.env.CLAIMPAIGN_CONFIG_DIR;
   delete process.env.CLAIMPAIGN_TOKEN;
@@ -133,8 +142,9 @@ describe('campaign create', () => {
 
     const csv = readFileSync(result.codesFile!, 'utf8');
     const lines = csv.trim().split('\n');
-    expect(lines[0]).toBe('code,claim_uri,fallback_url');
+    expect(lines[0]).toBe('code,status,claim_uri,fallback_url');
     expect(lines.length).toBe(4);
+    expect(csv).toContain(',unclaimed,');
     expect(csv).toContain('web+cardano://claim/v1?faucet_url=');
     expect(csv).toContain(`${thisFake.url}/api/qr/`);
 
@@ -398,15 +408,15 @@ describe('campaign create', () => {
     fake = thisFake;
 
     writeFileSync(pendingFile(), JSON.stringify({
-      key: 'existing-key', api: thisFake.url, tokenPrefix: 'MISMATCHEDPRE',
+      key: 'existing-key', api: thisFake.url, tokenHash: 'mismatched12',
       body: { name: 'X', codePrefix: 'X', codeCount: 1, network: 'preprod' }, createdAt: new Date().toISOString(),
     }));
 
     const err = await campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'NEW001', out: dir }).catch(e => e);
     expect(err).toBeInstanceOf(UsageError);
     expect(err.message).toContain('--fresh');
-    expect(err.message).not.toContain('MISMATCHEDPRE');
-    expect(err.message).not.toContain(TOKEN.slice(0, 12));
+    expect(err.message).not.toContain('mismatched12');
+    expect(err.message).not.toContain(TOKEN);
     expect(thisFake.calls.length).toBe(0);
 
     const result = await campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'NEW001', out: dir, fresh: true });
@@ -417,10 +427,10 @@ describe('campaign create', () => {
   it('refuses to resume a pending entry for a different api without --fresh, and sends no request', async () => {
     const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
     fake = thisFake;
-    const currentTokenPrefix = TOKEN.slice(0, 12);
+    const currentTokenHash = hashToken(TOKEN);
 
     writeFileSync(pendingFile(), JSON.stringify({
-      key: 'existing-key', api: 'http://127.0.0.1:1', tokenPrefix: currentTokenPrefix,
+      key: 'existing-key', api: 'http://127.0.0.1:1', tokenHash: currentTokenHash,
       body: { name: 'X', codePrefix: 'X', codeCount: 1, network: 'preprod' }, createdAt: new Date().toISOString(),
     }));
 
@@ -430,6 +440,21 @@ describe('campaign create', () => {
     expect(err.message).toContain(thisFake.url);
     expect(err.message).toContain('--fresh');
     expect(thisFake.calls.length).toBe(0);
+  });
+
+  it('treats a truncated pending file as no pending entry, and creates fresh', async () => {
+    const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
+    fake = thisFake;
+
+    const raw = JSON.stringify({
+      key: 'existing-key', api: thisFake.url, tokenHash: hashToken(TOKEN),
+      body: { name: 'X', codePrefix: 'X', codeCount: 1, network: 'preprod' }, createdAt: new Date().toISOString(),
+    });
+    writeFileSync(pendingFile(), raw.slice(0, Math.floor(raw.length / 2)));
+
+    const result = await campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'TRUNC1', out: dir });
+    expect(result.campaign.status).toBe('active');
+    expect(thisFake.calls.filter(c => c.method === 'POST').length).toBe(1);
   });
 
   it('deduplicates a shared code claimed three times into one CSV row and reports 3/60 progress', async () => {
@@ -475,9 +500,52 @@ describe('campaign create', () => {
     expect(existsSync(pendingFile())).toBe(false);
   });
 
+  it('accepts an uppercase policy id and asset name hex, lowercasing the unit before sending', async () => {
+    const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
+    fake = thisFake;
+
+    const policyId = 'A'.repeat(56);
+    await campaignCreate({
+      api: thisFake.url, json: false, name: 'Tok', claims: 1, prefix: 'TOKUP1', out: dir,
+      token: [`${policyId}.4841434B:100`],
+    });
+
+    const post = thisFake.calls.find(c => c.method === 'POST')!;
+    expect(post.body.tokenBundle).toEqual([{ unit: `${policyId.toLowerCase()}.4841434b`, quantity: '100' }]);
+  });
+
+  it('treats a 401 on create as a definitive rejection, dropping the pending entry so the next attempt gets a new key', async () => {
+    const thisFake = await startCampaignFake({
+      onCreate: (req, byKey, byId) => {
+        if (req.body.name === 'Unauthorized') return { status: 401, body: { error: 'Invalid API key' } };
+        const key = req.headers['idempotency-key'] as string;
+        const id = 'camp-after-401';
+        const prefix = req.body.codePrefix as string;
+        const codes = makeCodes(prefix, req.body.codeCount as number);
+        byKey.set(key, id);
+        byId.set(id, { id, status: 'active', prefix, codeMode: 'unique', totalCodes: req.body.codeCount, codes, codesClaimed: 0 });
+        return { status: 201, body: { pending: false, campaign: { id, status: 'active', codePrefix: prefix, totalCodes: req.body.codeCount }, pricing: { serviceFee: 500_000, perCodeCost: 2_500_000, totalCost: 3_000_000, tokenValue: 0 }, codes } };
+      },
+    });
+    fake = thisFake;
+
+    await expect(campaignCreate({ api: thisFake.url, json: false, name: 'Unauthorized', claims: 1, prefix: 'AUTH01', out: dir }))
+      .rejects.toThrow('Invalid API key');
+    expect(existsSync(pendingFile())).toBe(false);
+
+    const result = await campaignCreate({ api: thisFake.url, json: false, name: 'Good', claims: 1, prefix: 'AUTH01', out: dir });
+    expect(result.campaign.status).toBe('active');
+
+    const posts = thisFake.calls.filter(c => c.method === 'POST');
+    expect(posts.length).toBe(2);
+    expect(posts[0].headers['idempotency-key']).not.toBe(posts[1].headers['idempotency-key']);
+  });
+
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(campaignCreate({ api: 'http://127.0.0.1:1', json: false, name: 'X', claims: 1 })).rejects.toThrow('Not logged in');
+    const err = await campaignCreate({ api: 'http://127.0.0.1:1', json: false, name: 'X', claims: 1 }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });
 
@@ -510,7 +578,9 @@ describe('campaign list', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(campaignList({ api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
+    const err = await campaignList({ api: 'http://127.0.0.1:1', json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });
 
@@ -545,15 +615,13 @@ describe('campaign status', () => {
 describe('campaign end', () => {
   it('prints the refund in tADA on 200, sending only { status: "ended" }', async () => {
     const thisFake = await startFakeApi({
-      'PATCH /api/admin/campaign/camp-end-1': req => {
-        expect(req.body).toEqual({ status: 'ended' });
-        return { status: 200, body: { ok: true, status: 'ended', refunded: 12_500_000 } };
-      },
+      'PATCH /api/admin/campaign/camp-end-1': () => ({ status: 200, body: { ok: true, status: 'ended', refunded: 12_500_000 } }),
     });
     fake = thisFake;
 
     await campaignEnd('camp-end-1', { api: thisFake.url, json: false });
     expect(output.join('')).toBe('Campaign camp-end-1 ended, refunded 12.50 tADA\n');
+    expect(thisFake.calls[0].body).toEqual({ status: 'ended' });
   });
 
   it('prints the raw 200 body with --json', async () => {
@@ -636,35 +704,33 @@ describe('campaign end', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(campaignEnd('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
+    const err = await campaignEnd('camp-x', { api: 'http://127.0.0.1:1', json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });
 
 describe('campaign pause and resume', () => {
   it('pauses with exactly { status: "paused" } and prints a confirmation', async () => {
     const thisFake = await startFakeApi({
-      'PATCH /api/admin/campaign/camp-pause-1': req => {
-        expect(req.body).toEqual({ status: 'paused' });
-        return { status: 200, body: { ok: true, status: 'paused' } };
-      },
+      'PATCH /api/admin/campaign/camp-pause-1': () => ({ status: 200, body: { ok: true, status: 'paused' } }),
     });
     fake = thisFake;
 
     await campaignPause('camp-pause-1', { api: thisFake.url, json: false });
     expect(output.join('')).toBe('Campaign camp-pause-1 paused\n');
+    expect(thisFake.calls[0].body).toEqual({ status: 'paused' });
   });
 
   it('resumes with exactly { status: "active" } and prints a confirmation', async () => {
     const thisFake = await startFakeApi({
-      'PATCH /api/admin/campaign/camp-resume-1': req => {
-        expect(req.body).toEqual({ status: 'active' });
-        return { status: 200, body: { ok: true, status: 'active' } };
-      },
+      'PATCH /api/admin/campaign/camp-resume-1': () => ({ status: 200, body: { ok: true, status: 'active' } }),
     });
     fake = thisFake;
 
     await campaignResume('camp-resume-1', { api: thisFake.url, json: false });
     expect(output.join('')).toBe('Campaign camp-resume-1 resumed\n');
+    expect(thisFake.calls[0].body).toEqual({ status: 'active' });
   });
 
   it('passes a 409 from pausing an ended campaign through as an ApiError with the server text', async () => {
@@ -694,7 +760,11 @@ describe('campaign pause and resume', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(campaignPause('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
-    await expect(campaignResume('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
+    const pauseErr = await campaignPause('camp-x', { api: 'http://127.0.0.1:1', json: false }).catch(e => e);
+    expect(pauseErr).toBeInstanceOf(UsageError);
+    expect(pauseErr.message).toContain('Not logged in');
+    const resumeErr = await campaignResume('camp-x', { api: 'http://127.0.0.1:1', json: false }).catch(e => e);
+    expect(resumeErr).toBeInstanceOf(UsageError);
+    expect(resumeErr.message).toContain('Not logged in');
   });
 });
