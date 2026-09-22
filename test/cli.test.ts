@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fakeKey } from './helpers/fake-api.js';
 
 const run = (...args: string[]) => spawnSync('npx', ['tsx', 'src/bin.ts', ...args], { encoding: 'utf8' });
 
@@ -16,5 +20,18 @@ describe('claimpaign', () => {
   it('exits 2 on an unknown command or option', () => {
     expect(run('nonsense').status).toBe(2);
     expect(run('--bogus').status).toBe(2);
+  });
+  it('campaign create with no options and an empty config dir exits 2 with the missing --name/--claims message', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cp-cli-create-'));
+    try {
+      const r = spawnSync('npx', ['tsx', 'src/bin.ts', '--api', 'http://127.0.0.1:1', 'campaign', 'create'], {
+        encoding: 'utf8',
+        env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir, CLAIMPAIGN_TOKEN: fakeKey('cli') },
+      });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('--name and --claims are required to create a new campaign');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
