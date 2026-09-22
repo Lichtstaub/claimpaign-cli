@@ -4,7 +4,8 @@ import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
 import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
-import { campaignCreate, campaignList, campaignStatus, campaignCodes, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
+import { campaignCreate, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
+import { campaignCodes } from './commands/campaign-codes.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 

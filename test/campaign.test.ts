@@ -594,6 +594,24 @@ describe('campaign end', () => {
     expect(errOutput.join('')).toContain('Payouts are still settling, retrying...');
   });
 
+  it('with --json and --wait on a closing 409 then 200, stdout carries only the 200 body, the settling note stays on stderr', async () => {
+    let calls = 0;
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-json-wait': () => {
+        calls += 1;
+        if (calls === 1) return { status: 409, body: { error: 'Payouts are closing' } };
+        return { status: 200, body: { ok: true, status: 'ended', refunded: 3_000_000 } };
+      },
+    });
+    fake = thisFake;
+
+    await campaignEnd('camp-end-json-wait', { api: thisFake.url, json: true, wait: true, waitMs: 10 });
+    expect(calls).toBe(2);
+    expect(output.length).toBe(1);
+    expect(JSON.parse(output.join(''))).toEqual({ ok: true, status: 'ended', refunded: 3_000_000 });
+    expect(errOutput.join('')).toContain('Payouts are still settling, retrying...');
+  });
+
   it('propagates a non closing 409 as an ApiError with the server text', async () => {
     const thisFake = await startFakeApi({
       'PATCH /api/admin/campaign/camp-end-4': () => ({ status: 409, body: { error: 'Campaign is already paused, cannot end' } }),

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { startFakeApi, fakeKey, type FakeReq } from './helpers/fake-api.js';
 import { writeCsv, writeQrImages, writePdf } from '../src/export.js';
-import { campaignCodes } from '../src/commands/campaign.js';
+import { campaignCodes, buildExportItems } from '../src/commands/campaign-codes.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 const TOKEN = fakeKey('export');
@@ -47,6 +47,36 @@ describe('writeCsv', () => {
     writeCsv(path, [{ code: 'X', status: 'a "quote", a comma\nand a newline', claim_uri: 'u', fallback_url: 'f' }]);
     const text = readFileSync(path, 'utf8');
     expect(text).toBe('code,status,claim_uri,fallback_url\nX,"a ""quote"", a comma\nand a newline",u,f\n');
+  });
+
+  it('still writes the header line for an empty result when columns are given explicitly', () => {
+    const path = join(dir, 'empty.csv');
+    writeCsv(path, [], ['code', 'status', 'claim_uri', 'fallback_url']);
+    const text = readFileSync(path, 'utf8');
+    expect(text).toBe('code,status,claim_uri,fallback_url\n');
+  });
+});
+
+describe('buildExportItems', () => {
+  const rows = [
+    { code: 'AAA_0000000001', status: 'unclaimed', claim_uri: 'web+cardano://claim/v1?faucet_url=x&code=1', fallback_url: 'https://claimpaign.com/api/qr/AAA_0000000001' },
+    { code: 'AAA_0000000002', status: 'claimed', claim_uri: 'web+cardano://claim/v1?faucet_url=x&code=2', fallback_url: 'https://claimpaign.com/api/qr/AAA_0000000002' },
+  ];
+
+  it('uses claim_uri as the uri when fallback is false', () => {
+    const items = buildExportItems(rows, false);
+    expect(items).toEqual([
+      { code: 'AAA_0000000001', uri: rows[0].claim_uri },
+      { code: 'AAA_0000000002', uri: rows[1].claim_uri },
+    ]);
+  });
+
+  it('uses fallback_url as the uri when fallback is true', () => {
+    const items = buildExportItems(rows, true);
+    expect(items).toEqual([
+      { code: 'AAA_0000000001', uri: rows[0].fallback_url },
+      { code: 'AAA_0000000002', uri: rows[1].fallback_url },
+    ]);
   });
 });
 
@@ -180,7 +210,7 @@ describe('campaign codes', () => {
     expect(pdfDoc.getPageCount()).toBe(1);
   });
 
-  it('uses the fallback HTTPS URL for QR and PDF content with --fallback, CSV keeps both columns', async () => {
+  it('keeps both claim_uri and fallback_url columns in the CSV regardless of --fallback', async () => {
     const fake = await startCodesFake({
       id: 'camp-fb', name: 'Fallback', codeMode: 'unique', codePrefix: 'FBK001',
       pages: [[{ code: 'FBK001_0000000001', status: 'unclaimed' }]],

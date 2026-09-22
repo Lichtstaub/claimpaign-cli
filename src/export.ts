@@ -27,14 +27,20 @@ function ensureDirFor(path: string): void {
   if (dir) mkdirSync(dir, { recursive: true });
 }
 
-/** Writes a CSV file, header taken from the keys of the first row. A field is quoted when it contains a comma, quote or newline. */
-export function writeCsv(path: string, rows: Record<string, string>[]): void {
+/**
+ * Writes a CSV file. Pass columns explicitly to fix the header and its order, including
+ * for an empty result, which still gets a header line with no rows under it. Without
+ * columns, the header falls back to the keys of the first row, and an empty result
+ * writes an empty file since there are no keys to take a header from. A field is quoted
+ * when it contains a comma, quote or newline.
+ */
+export function writeCsv(path: string, rows: Record<string, string>[], columns?: string[]): void {
   ensureDirFor(path);
-  if (rows.length === 0) {
+  const keys = columns ?? (rows.length > 0 ? Object.keys(rows[0]) : []);
+  if (keys.length === 0) {
     writeFileSync(path, '');
     return;
   }
-  const keys = Object.keys(rows[0]);
   const lines = [keys.map(csvField).join(',')];
   for (const row of rows) lines.push(keys.map(k => csvField(row[k] ?? '')).join(','));
   writeFileSync(path, lines.join('\n') + '\n');
