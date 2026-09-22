@@ -1,6 +1,6 @@
 # claimpaign
 
-Command line tool for Claimpaign sandbox campaigns and CIP-99 claims. It creates and manages campaigns from the terminal, and claims CIP-99 codes on the Cardano preprod testnet.
+Command line tool for Claimpaign sandbox campaigns and CIP-99 claims. It is made for events like hackathons, workshops and school classes where many people need preprod ada or test tokens quickly: the organizer creates a campaign from the terminal and hands out codes or QR cards, participants claim without owning a wallet yet, and the organization's own test tokens can be distributed the same way. It also claims CIP-99 codes from other faucets on the Cardano preprod testnet.
 
 ## Install
 
