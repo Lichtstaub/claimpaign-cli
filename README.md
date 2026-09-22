@@ -71,6 +71,8 @@ The CLI stores its login in `~/.config/claimpaign/config.json` (mode 0600).
 
 ## Development
 
+From a checkout: `npm install && npm run build`, then `node dist/bin.js --help`, or `npm link` once to get the `claimpaign` command. `npx claimpaign` only works with the published package.
+
 ```
 npm test
 ```
