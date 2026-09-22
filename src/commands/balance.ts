@@ -1,11 +1,7 @@
 import { apiRequest, requireToken } from '../api.js';
 import { resolveApi } from '../config.js';
-import { print, table } from '../output.js';
+import { print, table, formatAda } from '../output.js';
 import type { CreditsBody, WalletBody } from '../api-types.js';
-
-function formatAda(value: number): string {
-  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 /** Fetches sandbox credits and the org wallet in parallel and prints a combined summary. */
 export async function balance(opts: { api?: string; json: boolean }): Promise<void> {

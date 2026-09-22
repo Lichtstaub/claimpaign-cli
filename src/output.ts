@@ -12,6 +12,11 @@ export function print(value: unknown, opts: { json: boolean }): void {
   else process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 }
 
+/** Formats an ada amount with exactly two decimals, e.g. 1234.5 becomes "1,234.50". */
+export function formatAda(value: number): string {
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 /** Plain aligned table for terminals, one object per row, keys become headers. */
 export function table(rows: Record<string, string | number>[]): string {
   if (rows.length === 0) return '(none)';

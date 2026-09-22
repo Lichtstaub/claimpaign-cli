@@ -108,6 +108,13 @@ describe('claim', () => {
     expect(api.calls).toHaveLength(0);
   });
 
+  it('rejects a Claimpaign code whose short code cannot be normalized', async () => {
+    api = await startFakeApi({});
+    await expect(claim('hack_!!!!!!!!!!', TEST_ADDRESS, { api: api.url, json: false }))
+      .rejects.toThrow(UsageError);
+    expect(api.calls).toHaveLength(0);
+  });
+
   it('prints ada, tokens and queue position when accepted', async () => {
     api = await startFakeApi({
       'POST /api/claim/HACK': () => ({
@@ -124,7 +131,7 @@ describe('claim', () => {
     await claim('hack_7k3mq9xz4h', TEST_ADDRESS, { api: api.url, json: false });
 
     const text = output.join('');
-    expect(text).toContain('Accepted: 3 tADA');
+    expect(text).toContain('Accepted: 3.00 tADA');
     expect(text).toContain('tokens policyidhex.617373657431:100, policyidhex.617373657432:5');
     expect(text).toContain('queue position 3');
   });
@@ -139,7 +146,7 @@ describe('claim', () => {
     await claim('hack_7k3mq9xz4h', TEST_ADDRESS, { api: api.url, json: false });
 
     const text = output.join('');
-    expect(text).toContain('Accepted: 2 tADA');
+    expect(text).toContain('Accepted: 2.00 tADA');
     expect(text).not.toContain('tokens');
     expect(text).toContain('queue position 1');
   });
@@ -207,5 +214,13 @@ describe('claim', () => {
     await expect(claim('hack_7k3mq9xz4h', TEST_ADDRESS, { api: api.url, json: true }))
       .rejects.toThrow('Unknown code');
     expect(JSON.parse(output.join(''))).toEqual(body);
+  });
+
+  it('throws a clear error when the faucet answers with a non json object body', async () => {
+    api = await startFakeApi({
+      'POST /api/claim/HACK': () => ({ status: 500, body: '<html>Bad Gateway</html>' }),
+    });
+    await expect(claim('hack_7k3mq9xz4h', TEST_ADDRESS, { api: api.url, json: false }))
+      .rejects.toThrow('The faucet answered with an unexpected response (HTTP 500)');
   });
 });

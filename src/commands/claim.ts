@@ -1,6 +1,6 @@
 import { apiRequest } from '../api.js';
 import { resolveApi } from '../config.js';
-import { print, UsageError } from '../output.js';
+import { print, UsageError, formatAda } from '../output.js';
 import { parseClaimUri, splitFullCode, normalizeShortCode } from '../codes.js';
 
 interface ClaimResponseBody {
@@ -54,7 +54,7 @@ function resolveClaimTarget(input: string, faucetOpt: string | undefined, api: s
 
 function formatAccepted(body: ClaimResponseBody): string {
   const ada = Number(body.lovelaces ?? 0) / 1_000_000;
-  const parts = [`Accepted: ${ada} tADA`];
+  const parts = [`Accepted: ${formatAda(ada)} tADA`];
   if (body.tokens && Object.keys(body.tokens).length > 0) {
     const tokenList = Object.entries(body.tokens).map(([unit, qty]) => `${unit}:${qty}`).join(', ');
     parts.push(`tokens ${tokenList}`);
@@ -75,13 +75,18 @@ export async function claim(input: string, address: string, opts: { api?: string
   }
 
   const url = new URL(faucetUrl);
-  const { body } = await apiRequest<ClaimResponseBody>({
+  const { status, body: rawBody } = await apiRequest({
     api: url.origin,
     method: 'POST',
     path: url.pathname + url.search,
     body: { code, address },
     allow: [400, 401, 403, 404, 409, 410, 422, 429, 500, 503],
   });
+
+  if (!rawBody || typeof rawBody !== 'object') {
+    throw new Error(`The faucet answered with an unexpected response (HTTP ${status})`);
+  }
+  const body = rawBody as ClaimResponseBody;
 
   if (body.status === 'accepted') {
     if (opts.json) {
