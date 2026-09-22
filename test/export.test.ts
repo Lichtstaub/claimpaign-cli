@@ -6,12 +6,14 @@ import { PDFDocument } from 'pdf-lib';
 import { startFakeApi, fakeKey, type FakeReq } from './helpers/fake-api.js';
 import { writeCsv, writeQrImages, writePdf } from '../src/export.js';
 import { campaignCodes, buildExportItems } from '../src/commands/campaign-codes.js';
+import { UsageError } from '../src/output.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 const TOKEN = fakeKey('export');
 
 let dir: string;
 let output: string[];
+let fake: Awaited<ReturnType<typeof startFakeApi>> | undefined;
 
 beforeEach(() => {
   output = [];
@@ -19,10 +21,15 @@ beforeEach(() => {
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   dir = mkdtempSync(join(tmpdir(), 'cp-export-'));
   process.env.CLAIMPAIGN_TOKEN = TOKEN;
+  fake = undefined;
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  if (fake) {
+    expect(fake.errors, 'fake api handler threw').toEqual([]);
+    await fake.close();
+  }
   rmSync(dir, { recursive: true, force: true });
   delete process.env.CLAIMPAIGN_TOKEN;
 });
@@ -151,7 +158,7 @@ async function startCodesFake(params: {
 
 describe('campaign codes', () => {
   it('loads every page and deduplicates unique codes, excluding claimed ones by default', async () => {
-    const fake = await startCodesFake({
+    fake = await startCodesFake({
       id: 'camp-pages', name: 'Pages', codeMode: 'unique', codePrefix: 'PAGE1',
       pages: [
         [{ code: 'PAGE1_0000000001', status: 'unclaimed' }, { code: 'PAGE1_0000000002', status: 'claimed' }],
@@ -161,7 +168,6 @@ describe('campaign codes', () => {
 
     const csv = join(dir, 'pages.csv');
     await campaignCodes('camp-pages', { api: fake.url, json: false, csv });
-    await fake.close();
 
     const rows = readFileSync(csv, 'utf8').trim().split('\n');
     expect(rows[0]).toBe('code,status,claim_uri,fallback_url');
@@ -171,21 +177,20 @@ describe('campaign codes', () => {
   });
 
   it('includes claimed codes with --all', async () => {
-    const fake = await startCodesFake({
+    fake = await startCodesFake({
       id: 'camp-all', name: 'All', codeMode: 'unique', codePrefix: 'ALLX1',
       pages: [[{ code: 'ALLX1_0000000001', status: 'unclaimed' }, { code: 'ALLX1_0000000002', status: 'claimed' }]],
     });
 
     const csv = join(dir, 'all.csv');
     await campaignCodes('camp-all', { api: fake.url, json: false, csv, all: true });
-    await fake.close();
 
     const rows = readFileSync(csv, 'utf8').trim().split('\n');
     expect(rows.length).toBe(3); // header + both codes
   });
 
   it('deduplicates a shared code delivered three times into one CSV row, one PNG and one PDF page', async () => {
-    const fake = await startCodesFake({
+    fake = await startCodesFake({
       id: 'camp-shared', name: 'Shared', codeMode: 'shared', codePrefix: 'SHR001',
       pages: [[
         { code: 'SHR001_0000000001', status: 'claimed' },
@@ -198,7 +203,6 @@ describe('campaign codes', () => {
     const qrDir = join(dir, 'shared-qr');
     const pdf = join(dir, 'shared.pdf');
     await campaignCodes('camp-shared', { api: fake.url, json: false, csv, qrDir, pdf });
-    await fake.close();
 
     const rows = readFileSync(csv, 'utf8').trim().split('\n');
     expect(rows.length).toBe(2); // header + one row, exported even though every row is claimed
@@ -211,14 +215,13 @@ describe('campaign codes', () => {
   });
 
   it('keeps both claim_uri and fallback_url columns in the CSV regardless of --fallback', async () => {
-    const fake = await startCodesFake({
+    fake = await startCodesFake({
       id: 'camp-fb', name: 'Fallback', codeMode: 'unique', codePrefix: 'FBK001',
       pages: [[{ code: 'FBK001_0000000001', status: 'unclaimed' }]],
     });
 
     const csv = join(dir, 'fb.csv');
     await campaignCodes('camp-fb', { api: fake.url, json: false, csv, fallback: true });
-    await fake.close();
 
     const text = readFileSync(csv, 'utf8');
     expect(text).toContain('web+cardano://claim/v1?faucet_url=');
@@ -226,7 +229,7 @@ describe('campaign codes', () => {
   });
 
   it('prints a table without any output flag, and json with both uri fields', async () => {
-    const fake = await startCodesFake({
+    fake = await startCodesFake({
       id: 'camp-table', name: 'Table', codeMode: 'unique', codePrefix: 'TBL001',
       pages: [[{ code: 'TBL001_0000000001', status: 'unclaimed' }]],
     });
@@ -240,11 +243,10 @@ describe('campaign codes', () => {
     expect(parsed.campaign.id).toBe('camp-table');
     expect(parsed.codes[0].claim_uri).toContain('web+cardano://');
     expect(parsed.codes[0].fallback_url).toContain('/api/qr/');
-    await fake.close();
   });
 
   it('prints one line per written target with counts, json prints paths and count', async () => {
-    const fake = await startCodesFake({
+    fake = await startCodesFake({
       id: 'camp-out', name: 'Out', codeMode: 'unique', codePrefix: 'OUT001',
       pages: [[{ code: 'OUT001_0000000001', status: 'unclaimed' }, { code: 'OUT001_0000000002', status: 'unclaimed' }]],
     });
@@ -263,11 +265,12 @@ describe('campaign codes', () => {
     expect(parsed.qrDir).toBe(qrDir);
     expect(parsed.count).toBe(2);
     expect(parsed.pdf).toBeUndefined();
-    await fake.close();
   });
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(campaignCodes('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
+    const err = await campaignCodes('camp-x', { api: 'http://127.0.0.1:1', json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });

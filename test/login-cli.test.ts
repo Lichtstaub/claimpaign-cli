@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startFakeApi, fakeKey } from './helpers/fake-api.js';
+import { startFakeApi, fakeKey, authGuarded } from './helpers/fake-api.js';
 
 // End to end coverage of the login/logout wiring in src/cli.ts. The fake api server
 // runs in this same process, so the child cli process is driven with the async
@@ -21,7 +21,8 @@ interface CliResult { status: number | null; signal: NodeJS.Signals | null; stdo
 function runCli(args: string[], input: string, dir: string): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', ['tsx', 'src/bin.ts', ...args], {
-      env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir },
+      // The child must not inherit a token or api from the developer shell
+      env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir, CLAIMPAIGN_TOKEN: undefined, CLAIMPAIGN_API: undefined },
       timeout: 15000,
     });
     let stdout = '';
@@ -46,12 +47,11 @@ describe('login and logout through the cli', () => {
 
   beforeAll(async () => {
     api = await startFakeApi({
-      'GET /api/org/credits': req => req.headers.authorization === `Bearer ${GOOD}`
-        ? { status: 200, body: { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } } }
-        : { status: 401, body: { error: 'Invalid API key' } },
+      'GET /api/org/credits': authGuarded(GOOD, { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } }),
     });
   });
   afterAll(async () => { await api.close(); });
+  afterEach(() => { expect(api.errors, 'fake api handler threw').toEqual([]); });
 
   it('logs in with a good key piped on stdin and never echoes it', async () => {
     await withDir(async dir => {
@@ -90,6 +90,14 @@ describe('login and logout through the cli', () => {
       expect(r.signal).toBeNull();
       expect(r.stdout.trim()).toBe('Logged out.');
       expect(readConfigFile(dir)).toEqual({ api: api.url });
+    });
+  });
+
+  it('exits 2 for balance with no token and an empty config', async () => {
+    await withDir(async dir => {
+      const r = await runCli(['balance'], '', dir);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('Not logged in');
     });
   });
 });

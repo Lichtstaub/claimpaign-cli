@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startFakeApi, fakeKey } from './helpers/fake-api.js';
+import { startFakeApi, fakeKey, authGuarded } from './helpers/fake-api.js';
 import { balance } from '../src/commands/balance.js';
 import { deposit } from '../src/commands/deposit.js';
+import { UsageError } from '../src/output.js';
 
 const TOKEN = fakeKey('balance');
 
@@ -63,17 +64,14 @@ beforeEach(async () => {
   process.env.CLAIMPAIGN_CONFIG_DIR = dir;
   process.env.CLAIMPAIGN_TOKEN = TOKEN;
   api = await startFakeApi({
-    'GET /api/org/credits': req => req.headers.authorization === `Bearer ${TOKEN}`
-      ? { status: 200, body: CREDITS_BODY }
-      : { status: 401, body: { error: 'Invalid API key' } },
-    'GET /api/org/wallet': req => req.headers.authorization === `Bearer ${TOKEN}`
-      ? { status: 200, body: WALLET_BODY }
-      : { status: 401, body: { error: 'Invalid API key' } },
+    'GET /api/org/credits': authGuarded(TOKEN, CREDITS_BODY),
+    'GET /api/org/wallet': authGuarded(TOKEN, WALLET_BODY),
   });
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  expect(api.errors, 'fake api handler threw').toEqual([]);
   await api.close();
   rmSync(dir, { recursive: true, force: true });
   delete process.env.CLAIMPAIGN_CONFIG_DIR;
@@ -137,7 +135,9 @@ describe('balance', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(balance({ api: api.url, json: false })).rejects.toThrow('Not logged in');
+    const err = await balance({ api: api.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });
 
@@ -156,6 +156,8 @@ describe('deposit', () => {
 
   it('throws Not logged in without a stored token', async () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    await expect(deposit({ api: api.url, json: false })).rejects.toThrow('Not logged in');
+    const err = await deposit({ api: api.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('Not logged in');
   });
 });

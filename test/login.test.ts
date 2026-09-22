@@ -3,9 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { startFakeApi, fakeKey } from './helpers/fake-api.js';
+import { startFakeApi, fakeKey, authGuarded } from './helpers/fake-api.js';
 import { login, logout, promptSecret } from '../src/commands/login.js';
 import { readConfig } from '../src/config.js';
+import { UsageError } from '../src/output.js';
 
 // Keys must pass the local shape check (cps_ plus 40 chars of a-z and 2-9)
 const GOOD = fakeKey('good');
@@ -17,12 +18,16 @@ beforeEach(async () => {
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   dir = mkdtempSync(join(tmpdir(), 'cp-')); process.env.CLAIMPAIGN_CONFIG_DIR = dir;
   api = await startFakeApi({
-    'GET /api/org/credits': req => req.headers.authorization === `Bearer ${GOOD}`
-      ? { status: 200, body: { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } } }
-      : { status: 401, body: { error: 'Invalid API key' } },
+    'GET /api/org/credits': authGuarded(GOOD, { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } }),
   });
 });
-afterEach(async () => { vi.restoreAllMocks(); await api.close(); rmSync(dir, { recursive: true, force: true }); delete process.env.CLAIMPAIGN_CONFIG_DIR; });
+afterEach(async () => {
+  vi.restoreAllMocks();
+  expect(api.errors, 'fake api handler threw').toEqual([]);
+  await api.close();
+  rmSync(dir, { recursive: true, force: true });
+  delete process.env.CLAIMPAIGN_CONFIG_DIR;
+});
 
 describe('login', () => {
   it('stores a key the server accepts, together with the api url', async () => {
@@ -32,6 +37,11 @@ describe('login', () => {
   it('rejects a key the server refuses and stores nothing', async () => {
     await expect(login({ api: api.url, token: BAD, json: false })).rejects.toThrow('not accepted');
     expect(readConfig()).toEqual({});
+  });
+  it('rejects a key with the wrong shape as a UsageError, without contacting the server', async () => {
+    const err = await login({ api: api.url, token: 'not-a-valid-key', json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(api.calls).toHaveLength(0);
   });
   it('logout removes the token but keeps the api url', async () => {
     await login({ api: api.url, token: GOOD, json: false });

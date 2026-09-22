@@ -36,3 +36,10 @@ export async function startFakeApi(handlers: Record<string, Handler>) {
 export function fakeKey(label: string): string {
   return 'cps_' + (label + 'x'.repeat(40)).slice(0, 40).replace(/[^a-z2-9]/g, 'x');
 }
+
+/** A handler that returns body for the given bearer token, and a 401 with the standard invalid key error otherwise. */
+export function authGuarded(token: string, body: unknown): Handler {
+  return req => req.headers.authorization === `Bearer ${token}`
+    ? { status: 200, body }
+    : { status: 401, body: { error: 'Invalid API key' } };
+}
