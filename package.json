@@ -3,9 +3,17 @@
   "version": "0.1.0",
   "description": "Command line tool for Claimpaign sandbox campaigns and CIP-99 claims",
   "type": "module",
-  "bin": { "claimpaign": "./dist/bin.js" },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=20" },
+  "bin": {
+    "claimpaign": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/bin.ts",
@@ -13,7 +21,10 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
-  "repository": { "type": "git", "url": "git+https://github.com/Lichtstaub/claimpaign-cli.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lichtstaub/claimpaign-cli.git"
+  },
   "license": "Apache-2.0",
   "dependencies": {
     "commander": "^13.1.0",
