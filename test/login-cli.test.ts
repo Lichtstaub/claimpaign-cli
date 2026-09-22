@@ -21,7 +21,8 @@ interface CliResult { status: number | null; signal: NodeJS.Signals | null; stdo
 function runCli(args: string[], input: string, dir: string): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', ['tsx', 'src/bin.ts', ...args], {
-      env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir },
+      // The child must not inherit a token or api from the developer shell
+      env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir, CLAIMPAIGN_TOKEN: undefined, CLAIMPAIGN_API: undefined },
       timeout: 15000,
     });
     let stdout = '';
