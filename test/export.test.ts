@@ -126,6 +126,14 @@ describe('writePdf', () => {
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBe(1);
   });
+
+  it('does not throw for a title outside the WinAnsi charset, such as an emoji', async () => {
+    const path = join(dir, 'emoji.pdf');
+    await writePdf(path, [{ code: 'AAA_0000000001', uri: 'web+cardano://claim/v1?faucet_url=x&code=1' }], 'Launch 🚀');
+    const bytes = readFileSync(path);
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(1);
+  });
 });
 
 /** A minimal admin campaign GET fake, paginated by ?page, serving whatever code rows are given. */

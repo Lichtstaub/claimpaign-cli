@@ -17,6 +17,18 @@ const PER_PAGE = COLS * ROWS;
 const MARGIN = 36;
 const QR_SIZE = 120;
 
+/**
+ * Replaces every character outside the WinAnsi printable range with "?", so text drawn
+ * with a pdf-lib standard font never throws on a character such as an emoji, which the
+ * standard fonts cannot encode.
+ */
+function toWinAnsi(text: string): string {
+  return Array.from(text).map(ch => {
+    const code = ch.codePointAt(0) ?? 0;
+    return (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) ? ch : '?';
+  }).join('');
+}
+
 function csvField(value: string): string {
   if (/[",\n]/.test(value)) return '"' + value.replace(/"/g, '""') + '"';
   return value;
@@ -59,13 +71,15 @@ function drawCard(page: PDFPage, qrImage: Awaited<ReturnType<PDFDocument['embedP
   const qrY = cellTop - QR_SIZE - 12;
   page.drawImage(qrImage, { x: qrX, y: qrY, width: QR_SIZE, height: QR_SIZE });
 
+  const safeCode = toWinAnsi(code);
   const codeSize = 10;
-  const codeWidth = monoFont.widthOfTextAtSize(code, codeSize);
-  page.drawText(code, { x: cellX + (cellWidth - codeWidth) / 2, y: qrY - 14, size: codeSize, font: monoFont });
+  const codeWidth = monoFont.widthOfTextAtSize(safeCode, codeSize);
+  page.drawText(safeCode, { x: cellX + (cellWidth - codeWidth) / 2, y: qrY - 14, size: codeSize, font: monoFont });
 
+  const safeTitle = toWinAnsi(title);
   const titleSize = 7;
-  const titleWidth = titleFont.widthOfTextAtSize(title, titleSize);
-  page.drawText(title, { x: cellX + (cellWidth - titleWidth) / 2, y: qrY - 26, size: titleSize, font: titleFont });
+  const titleWidth = titleFont.widthOfTextAtSize(safeTitle, titleSize);
+  page.drawText(safeTitle, { x: cellX + (cellWidth - titleWidth) / 2, y: qrY - 26, size: titleSize, font: titleFont });
 }
 
 /**
