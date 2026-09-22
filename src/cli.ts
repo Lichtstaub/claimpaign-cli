@@ -4,7 +4,7 @@ import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
 import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
-import { campaignCreate, campaignList, campaignStatus } from './commands/campaign.js';
+import { campaignCreate, campaignList, campaignStatus, campaignCodes } from './commands/campaign.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -100,6 +100,27 @@ export function buildProgram(): Command {
     .action(async (id: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await campaignStatus(id, { api: opts.api, json: opts.json });
+    });
+
+  campaign
+    .command('codes <id>')
+    .description('Export a campaign\'s codes as CSV, QR images and/or a print-ready PDF')
+    .option('--csv <file>', 'write a CSV file')
+    .option('--qr-dir <dir>', 'write one QR PNG per code into this directory')
+    .option('--pdf <file>', 'write a print-ready PDF with one card per code')
+    .option('--fallback', 'use the HTTPS fallback URL instead of the wallet deep link for QR and PDF', false)
+    .option('--all', 'include already claimed codes', false)
+    .action(async (id: string, cmdOpts: { csv?: string; qrDir?: string; pdf?: string; fallback: boolean; all: boolean }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignCodes(id, {
+        api: opts.api,
+        json: opts.json,
+        csv: cmdOpts.csv,
+        qrDir: cmdOpts.qrDir,
+        pdf: cmdOpts.pdf,
+        fallback: cmdOpts.fallback,
+        all: cmdOpts.all,
+      });
     });
 
   program
