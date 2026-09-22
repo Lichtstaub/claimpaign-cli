@@ -1,6 +1,7 @@
 import { Command, CommanderError } from 'commander';
 import { createRequire } from 'node:module';
 import { UsageError } from './output.js';
+import { login, logout, promptSecret } from './commands/login.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -15,15 +16,18 @@ export function buildProgram(): Command {
   program
     .command('login')
     .description('Store a sandbox API key')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .action(async () => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      const token = await promptSecret('Paste your sandbox API key (from Settings, Sandbox API): ');
+      await login({ api: opts.api, token, json: opts.json });
     });
 
   program
     .command('logout')
     .description('Remove the stored sandbox API key')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .action(async () => {
+      await logout();
+      if (!program.opts<{ json: boolean }>().json) process.stdout.write('Logged out.\n');
     });
 
   program
