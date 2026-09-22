@@ -1,13 +1,7 @@
 import { apiRequest, requireToken } from '../api.js';
 import { resolveApi } from '../config.js';
 import { print } from '../output.js';
-
-interface WalletBody {
-  network: string;
-  address: string;
-  ada: { lovelace: string; ada: number };
-  tokens: unknown[];
-}
+import type { WalletBody } from '../api-types.js';
 
 /** Fetches the org wallet and prints its address together with deposit instructions. */
 export async function deposit(opts: { api?: string; json: boolean }): Promise<void> {

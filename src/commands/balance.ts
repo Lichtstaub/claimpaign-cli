@@ -1,32 +1,7 @@
 import { apiRequest, requireToken } from '../api.js';
 import { resolveApi } from '../config.js';
 import { print, table } from '../output.js';
-
-interface CreditsBody {
-  balance: { lovelace: number; ada: number };
-  balances: { preprod: { lovelace: number; ada: number } };
-  lockedInCampaigns: { lovelace: number; ada: number };
-  activeCampaignCount: number;
-}
-
-interface WalletToken {
-  unit: string;
-  policyId: string;
-  assetNameHex: string;
-  assetNameUtf8: string;
-  onChain: string;
-  reserved: string;
-  inFlight: string;
-  available: string;
-  platform: boolean;
-}
-
-interface WalletBody {
-  network: string;
-  address: string;
-  ada: { lovelace: string; ada: number };
-  tokens: WalletToken[];
-}
+import type { CreditsBody, WalletBody } from '../api-types.js';
 
 function formatAda(value: number): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -60,7 +35,7 @@ export async function balance(opts: { api?: string; json: boolean }): Promise<vo
   }));
 
   const lines = [
-    `Sandbox credits: ${formatAda(creditsBody.balance.ada)} tADA (locked in campaigns: ${formatAda(creditsBody.lockedInCampaigns.ada)}, active campaigns: ${creditsBody.activeCampaignCount})`,
+    `Sandbox credits: ${formatAda(creditsBody.balance.ada)} tADA (locked in campaigns: ${formatAda(creditsBody.summary.lockedInCampaigns.ada)}, active campaigns: ${creditsBody.summary.activeCampaignCount})`,
     `Org wallet: ${walletBody.address}  (${formatAda(walletBody.ada.ada)} tADA)`,
     '',
     table(rows),

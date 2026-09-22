@@ -9,10 +9,17 @@ import { deposit } from '../src/commands/deposit.js';
 const TOKEN = fakeKey('balance');
 
 const CREDITS_BODY = {
+  network: 'preprod',
+  businessComplete: true,
   balance: { lovelace: 1234500000, ada: 1234.5 },
   balances: { preprod: { lovelace: 1234500000, ada: 1234.5 } },
-  lockedInCampaigns: { lovelace: 200000000, ada: 200 },
-  activeCampaignCount: 2,
+  summary: {
+    totalDeposited: { lovelace: 1500000000, ada: 1500 },
+    lockedInCampaigns: { lovelace: 200000000, ada: 200 },
+    activeCampaignCount: 2,
+  },
+  platformAddress: 'addr_test1qzplatform0addr',
+  transactions: [],
 };
 
 const WALLET_BODY = {
@@ -103,6 +110,23 @@ describe('balance', () => {
     });
     await balance({ api: api.url, json: false });
     expect(output.join('')).toContain('(none)');
+  });
+
+  it('prints a token amount above 2^53 unchanged, as the raw string', async () => {
+    const hugeAmount = '12345678901234567890';
+    await api.close();
+    api = await startFakeApi({
+      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
+      'GET /api/org/wallet': () => ({
+        status: 200,
+        body: {
+          ...WALLET_BODY,
+          tokens: [{ ...WALLET_BODY.tokens[1], available: hugeAmount }],
+        },
+      }),
+    });
+    await balance({ api: api.url, json: false });
+    expect(output.join('')).toContain(hugeAmount);
   });
 
   it('prints the raw credits and wallet bodies as json', async () => {
