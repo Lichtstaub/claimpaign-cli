@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startFakeApi, fakeKey } from './helpers/fake-api.js';
+import { startFakeApi, fakeKey, authGuarded } from './helpers/fake-api.js';
 import { balance } from '../src/commands/balance.js';
 import { deposit } from '../src/commands/deposit.js';
 import { UsageError } from '../src/output.js';
@@ -64,12 +64,8 @@ beforeEach(async () => {
   process.env.CLAIMPAIGN_CONFIG_DIR = dir;
   process.env.CLAIMPAIGN_TOKEN = TOKEN;
   api = await startFakeApi({
-    'GET /api/org/credits': req => req.headers.authorization === `Bearer ${TOKEN}`
-      ? { status: 200, body: CREDITS_BODY }
-      : { status: 401, body: { error: 'Invalid API key' } },
-    'GET /api/org/wallet': req => req.headers.authorization === `Bearer ${TOKEN}`
-      ? { status: 200, body: WALLET_BODY }
-      : { status: 401, body: { error: 'Invalid API key' } },
+    'GET /api/org/credits': authGuarded(TOKEN, CREDITS_BODY),
+    'GET /api/org/wallet': authGuarded(TOKEN, WALLET_BODY),
   });
 });
 

@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomInt, randomUUID, createHash } from 'node:crypto';
-import { apiRequest, ApiError, requireToken } from '../api.js';
+import { apiRequest, ApiError, requireToken, sleep } from '../api.js';
 import { configDir, resolveApi } from '../config.js';
 import { print, table, UsageError } from '../output.js';
 import { buildClaimUri, buildFallbackUri, splitFullCode } from '../codes.js';
 import { writeCsv } from '../export.js';
-import { loadAllCodes, CSV_COLUMNS } from './campaign-codes.js';
+import { loadAllCodes, CSV_COLUMNS, MAX_PAGES } from './campaign-codes.js';
 import type {
   CampaignCreateRequestBody,
   CampaignCreateResponseBody,
@@ -23,8 +23,6 @@ const DEFAULT_POLL_MS = 10_000;
 const DEFAULT_POLL_TIMEOUT_MS = 900_000;
 const DEFAULT_END_WAIT_MS = 20_000;
 const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
-/** Safety cap on paginated fetches, in case a server response carries a bad or huge pages value. */
-const MAX_PAGES = 1000;
 
 export interface CampaignCreateOpts {
   api?: string;
@@ -56,10 +54,6 @@ interface PendingCreateEntry {
   tokenHash: string;
   body: CampaignCreateRequestBody;
   createdAt: string;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /** First 12 hex characters of sha256(token), enough to tell two keys apart without storing or printing any part of the key itself. */
@@ -153,7 +147,7 @@ function isDefinitiveRejection(status: number, body: unknown): boolean {
   return false;
 }
 
-function formatAda(lovelace: number): string {
+function formatLovelace(lovelace: number): string {
   return (lovelace / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -304,7 +298,7 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
     const lines = [`Campaign ${result.campaign.id} is active.`, `Prefix: ${result.campaign.codePrefix}`];
     if (page1.campaign.code_mode === 'shared') lines.push(`Claim capacity: ${result.campaign.totalCodes} (one shared code)`);
     else lines.push(`Codes: ${result.campaign.totalCodes}`);
-    lines.push(`Cost: ${pricing ? `${formatAda(pricing.totalCost)} tADA` : 'see claimpaign campaign status'}`);
+    lines.push(`Cost: ${pricing ? `${formatLovelace(pricing.totalCost)} tADA` : 'see claimpaign campaign status'}`);
     if (codesFile) {
       lines.push(`Codes exported to ${codesFile}`);
       if (page1.campaign.code_mode === 'shared') lines.push('Anyone with this code can claim it once per wallet.');
@@ -415,7 +409,7 @@ export async function campaignEnd(id: string, opts: CampaignEndOpts): Promise<vo
 
     if (res.status === 200) {
       if (opts.json) print(res.body, { json: true });
-      else print(`Campaign ${id} ended, refunded ${formatAda(res.body.refunded ?? 0)} tADA`, { json: false });
+      else print(`Campaign ${id} ended, refunded ${formatLovelace(res.body.refunded ?? 0)} tADA`, { json: false });
       return;
     }
 

@@ -33,7 +33,7 @@ export class ApiError extends Error {
 const DEFAULT_RETRY_DELAYS_MS = [2000, 4000, 8000];
 const RETRYABLE_METHODS = new Set(['GET', 'PATCH']);
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 

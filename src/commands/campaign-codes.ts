@@ -7,10 +7,9 @@ import type { CampaignCode, CampaignFields, CampaignGetResponseBody } from '../a
 
 /**
  * Safety cap on paginated fetches, in case a server response carries a bad or huge
- * pages value. Kept local to this module (campaign.ts has its own copy for its own
- * pagination loop) rather than shared, to avoid a cross-module import cycle.
+ * pages value. Shared with campaign.ts's own pagination loop over the campaign list.
  */
-const MAX_PAGES = 1000;
+export const MAX_PAGES = 1000;
 
 /** Shared with campaign.ts, so a freshly created campaign's CSV lines up with campaign codes. */
 export const CSV_COLUMNS = ['code', 'status', 'claim_uri', 'fallback_url'];

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { startFakeApi, fakeKey } from './helpers/fake-api.js';
+import { startFakeApi, fakeKey, authGuarded } from './helpers/fake-api.js';
 import { login, logout, promptSecret } from '../src/commands/login.js';
 import { readConfig } from '../src/config.js';
 import { UsageError } from '../src/output.js';
@@ -18,9 +18,7 @@ beforeEach(async () => {
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   dir = mkdtempSync(join(tmpdir(), 'cp-')); process.env.CLAIMPAIGN_CONFIG_DIR = dir;
   api = await startFakeApi({
-    'GET /api/org/credits': req => req.headers.authorization === `Bearer ${GOOD}`
-      ? { status: 200, body: { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } } }
-      : { status: 401, body: { error: 'Invalid API key' } },
+    'GET /api/org/credits': authGuarded(GOOD, { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } }),
   });
 });
 afterEach(async () => {

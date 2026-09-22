@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startFakeApi, fakeKey } from './helpers/fake-api.js';
+import { startFakeApi, fakeKey, authGuarded } from './helpers/fake-api.js';
 
 // End to end coverage of the login/logout wiring in src/cli.ts. The fake api server
 // runs in this same process, so the child cli process is driven with the async
@@ -47,9 +47,7 @@ describe('login and logout through the cli', () => {
 
   beforeAll(async () => {
     api = await startFakeApi({
-      'GET /api/org/credits': req => req.headers.authorization === `Bearer ${GOOD}`
-        ? { status: 200, body: { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } } }
-        : { status: 401, body: { error: 'Invalid API key' } },
+      'GET /api/org/credits': authGuarded(GOOD, { balance: { lovelace: 5000000, ada: 5 }, balances: { preprod: { lovelace: 5000000, ada: 5 } } }),
     });
   });
   afterAll(async () => { await api.close(); });
