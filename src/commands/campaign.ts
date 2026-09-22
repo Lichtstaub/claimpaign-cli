@@ -20,6 +20,8 @@ const PREFIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const TOKEN_ARG = /^([a-f0-9]{56})\.([a-f0-9]*):([0-9]+)$/;
 const DEFAULT_POLL_MS = 10_000;
 const DEFAULT_POLL_TIMEOUT_MS = 900_000;
+/** Safety cap on paginated fetches, in case a server response carries a bad or huge pages value. */
+const MAX_PAGES = 1000;
 
 export interface CampaignCreateOpts {
   api?: string;
@@ -134,6 +136,73 @@ function formatAda(lovelace: number): string {
 }
 
 /**
+ * Explains why a pending entry cannot be resumed, without ever printing any part of the
+ * API key, only whether it differs.
+ */
+function pendingMismatchMessage(pending: PendingCreateEntry, api: string, tokenPrefix: string): string {
+  const reasons: string[] = [];
+  if (pending.api !== api) reasons.push(`the pending attempt targets ${pending.api}, this run targets ${api}`);
+  if (pending.tokenPrefix !== tokenPrefix) reasons.push('the pending attempt used a different API key');
+  return `A pending campaign creation exists, but ${reasons.join(' and ')}. Run with --fresh to start a new one.`;
+}
+
+/** Polls GET .../campaign/<id> every pollMs until active, or throws once deadline passes or creation_failed comes back. */
+async function pollUntilActive(params: {
+  api: string; token: string; campaignId: string; pollMs: number; deadline: number;
+}): Promise<CampaignGetResponseBody> {
+  const { api, token, campaignId, pollMs, deadline } = params;
+  for (;;) {
+    const res = await apiRequest<CampaignGetResponseBody>({
+      api, token, method: 'GET', path: `/api/admin/campaign/${campaignId}?page=1&limit=200`,
+    });
+    const page1 = res.body;
+    if (page1.campaign.status === 'active') return page1;
+    if (page1.campaign.status === 'creation_failed') {
+      deletePendingEntry();
+      throw new Error(`Campaign ${campaignId} failed during creation. Check the dashboard or start a new campaign with --fresh.`);
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Campaign ${campaignId} is still settling. It stays pending, run "claimpaign campaign create" again to resume it, ` +
+        'or use --fresh to start a new campaign instead.',
+      );
+    }
+    await sleep(pollMs);
+  }
+}
+
+/** Fetches every remaining page of codes, deduplicates by code, and writes the export CSV. Returns its path. */
+async function exportCodes(params: {
+  api: string; token: string; campaignId: string; page1: CampaignGetResponseBody; outDir: string;
+}): Promise<string> {
+  const { api, token, campaignId, page1, outDir } = params;
+
+  const dedup = new Map<string, CampaignCode>();
+  for (const c of page1.codes) dedup.set(c.code, c);
+  const totalPages = Number.isFinite(page1.pagination.pages) ? Math.min(page1.pagination.pages, MAX_PAGES) : 1;
+  for (let p = 2; p <= totalPages; p++) {
+    const res = await apiRequest<CampaignGetResponseBody>({
+      api, token, method: 'GET', path: `/api/admin/campaign/${campaignId}?page=${p}&limit=200`,
+    });
+    for (const c of res.body.codes) dedup.set(c.code, c);
+  }
+
+  const prefix = page1.campaign.code_prefix;
+  const csvLines = ['code,claim_uri,fallback_url'];
+  for (const c of dedup.values()) {
+    const split = splitFullCode(c.code);
+    const shortCode = split?.shortCode ?? c.code;
+    const codePrefix = split?.prefix ?? prefix;
+    csvLines.push(`${c.code},${buildClaimUri(api, codePrefix, shortCode)},${buildFallbackUri(api, c.code)}`);
+  }
+
+  mkdirSync(outDir, { recursive: true });
+  const csvPath = join(outDir, `${prefix}-codes.csv`);
+  writeFileSync(csvPath, csvLines.join('\n') + '\n');
+  return csvPath;
+}
+
+/**
  * Creates a sandbox campaign and exports its codes to a CSV file.
  *
  * A creation attempt is tracked in a pending-create.json file in the config directory
@@ -159,10 +228,7 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
 
   if (pending) {
     if (pending.api !== api || pending.tokenPrefix !== tokenPrefix) {
-      throw new UsageError(
-        `A pending campaign creation exists for ${pending.api} (key ${pending.tokenPrefix}...). ` +
-        `This run targets ${api}. Use --fresh to discard the pending attempt and start a new one.`,
-      );
+      throw new UsageError(pendingMismatchMessage(pending, api, tokenPrefix));
     }
     key = pending.key;
     body = pending.body;
@@ -191,58 +257,17 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
   }
 
   const campaignId = createBody.campaign.id;
-  const initialStatus = createBody.campaign.status;
   const pricing = createBody.pricing;
 
-  if (initialStatus === 'creating') process.stderr.write('Funding is settling.\n');
+  if (createBody.campaign.status === 'creating') process.stderr.write('Funding is settling.\n');
 
-  const deadline = Date.now() + pollTimeoutMs;
-  let page1: CampaignGetResponseBody;
-  for (;;) {
-    const res = await apiRequest<CampaignGetResponseBody>({
-      api, token, method: 'GET', path: `/api/admin/campaign/${campaignId}?page=1&limit=200`,
-    });
-    page1 = res.body;
-    if (page1.campaign.status === 'active') break;
-    if (page1.campaign.status === 'creation_failed') {
-      deletePendingEntry();
-      throw new Error(`Campaign ${campaignId} failed during creation. Check the dashboard or start a new campaign with --fresh.`);
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Campaign ${campaignId} is still settling. It stays pending, run "claimpaign campaign create" again to resume it.`,
-      );
-    }
-    await sleep(pollMs);
-  }
-
+  const page1 = await pollUntilActive({ api, token, campaignId, pollMs, deadline: Date.now() + pollTimeoutMs });
   deletePendingEntry();
 
   let codesFile: string | undefined;
   let exportError: string | undefined;
   try {
-    const dedup = new Map<string, CampaignCode>();
-    for (const c of page1.codes) dedup.set(c.code, c);
-    const totalPages = page1.pagination.pages;
-    for (let p = 2; p <= totalPages; p++) {
-      const res = await apiRequest<CampaignGetResponseBody>({
-        api, token, method: 'GET', path: `/api/admin/campaign/${campaignId}?page=${p}&limit=200`,
-      });
-      for (const c of res.body.codes) dedup.set(c.code, c);
-    }
-
-    const prefix = page1.campaign.code_prefix;
-    const csvLines = ['code,claim_uri,fallback_url'];
-    for (const c of dedup.values()) {
-      const split = splitFullCode(c.code);
-      const shortCode = split?.shortCode ?? c.code;
-      const codePrefix = split?.prefix ?? prefix;
-      csvLines.push(`${c.code},${buildClaimUri(api, codePrefix, shortCode)},${buildFallbackUri(api, c.code)}`);
-    }
-    const outDir = opts.out || process.cwd();
-    const csvPath = join(outDir, `${prefix}-codes.csv`);
-    writeFileSync(csvPath, csvLines.join('\n') + '\n');
-    codesFile = csvPath;
+    codesFile = await exportCodes({ api, token, campaignId, page1, outDir: opts.out || process.cwd() });
   } catch (err) {
     exportError = `Could not export codes for campaign ${campaignId}: ${(err as Error).message}. Run: claimpaign campaign codes ${campaignId}`;
   }
@@ -270,7 +295,8 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
       lines.push(`Codes exported to ${codesFile}`);
       if (page1.campaign.code_mode === 'shared') lines.push('Anyone with this code can claim it once per wallet.');
     } else if (exportError) {
-      lines.push(`Export failed: ${exportError}`);
+      // The full message only appears once, in the Error thrown below, not here too.
+      lines.push('Codes could not be exported, see the error below.');
     }
     print(lines.join('\n'), { json: false });
   }
@@ -291,7 +317,7 @@ export async function campaignList(opts: { api?: string; json: boolean }): Promi
       api, token, method: 'GET', path: `/api/admin/campaigns?limit=100&page=${page}`,
     });
     campaigns.push(...body.campaigns);
-    if (page >= body.pages) break;
+    if (!Number.isFinite(body.pages) || page >= body.pages || page >= MAX_PAGES) break;
     page += 1;
   }
 

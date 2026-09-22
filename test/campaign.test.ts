@@ -196,6 +196,38 @@ describe('campaign create', () => {
     expect(existsSync(pendingFile())).toBe(false);
   });
 
+  it('resumes with the original key and body even when different options are given on the second call', async () => {
+    const thisFake = await startCampaignFake({
+      onCreate: (req, byKey, byId) => {
+        const key = req.headers['idempotency-key'] as string;
+        const existingId = byKey.get(key);
+        if (existingId) {
+          const c = byId.get(existingId)!;
+          return { status: 200, body: { campaign: { id: c.id, status: c.status }, codes: c.codes, idempotent: true } };
+        }
+        const id = 'camp-resume-opts';
+        const prefix = req.body.codePrefix as string;
+        const codes = makeCodes(prefix, req.body.codeCount as number);
+        byKey.set(key, id);
+        byId.set(id, { id, status: 'active', prefix, codeMode: 'unique', totalCodes: req.body.codeCount, codes, codesClaimed: 0 });
+        return { status: -1, body: null };
+      },
+    });
+    fake = thisFake;
+
+    await expect(campaignCreate({ api: thisFake.url, json: false, name: 'Original Name', claims: 2, prefix: 'RESU01', out: dir })).rejects.toThrow();
+
+    const result = await campaignCreate({ api: thisFake.url, json: false, name: 'Different Name', claims: 99, prefix: 'DIFFERENT', out: dir });
+    expect(result.campaign.id).toBe('camp-resume-opts');
+
+    const posts = thisFake.calls.filter(c => c.method === 'POST');
+    expect(posts.length).toBe(2);
+    expect(posts[1].headers['idempotency-key']).toBe(posts[0].headers['idempotency-key']);
+    expect(posts[1].body).toEqual(posts[0].body);
+    expect(posts[1].body.name).toBe('Original Name');
+    expect(posts[1].body.codeCount).toBe(2);
+  });
+
   it('resumes a lost response even when the pending entry is 30 hours old, with an age note on stderr', async () => {
     const thisFake = await startCampaignFake({
       onCreate: (req, byKey, byId) => {
@@ -302,6 +334,37 @@ describe('campaign create', () => {
     expect(thisFake.byId.size).toBe(1);
   });
 
+  it('polls from creating to active within a single call and succeeds without pricing (variant c)', async () => {
+    const getCounts = new Map<string, number>();
+    const thisFake = await startCampaignFake({
+      onCreate: (req, byKey, byId) => {
+        const key = req.headers['idempotency-key'] as string;
+        const id = 'camp-variant-c';
+        const prefix = req.body.codePrefix as string;
+        const codes = makeCodes(prefix, req.body.codeCount as number);
+        byKey.set(key, id);
+        byId.set(id, { id, status: 'creating', prefix, codeMode: 'unique', totalCodes: req.body.codeCount, codes, codesClaimed: 0 });
+        return { status: 202, body: { campaign: { id, status: 'creating' }, codes, pending: true, message: 'Funding is awaiting settlement.' } };
+      },
+      onGet: (req, c) => {
+        const n = (getCounts.get(c.id) || 0) + 1;
+        getCounts.set(c.id, n);
+        if (n >= 2) c.status = 'active';
+        return defaultGetResponse(req, c);
+      },
+    });
+    fake = thisFake;
+
+    const result = await campaignCreate({
+      api: thisFake.url, json: false, name: 'Variant C', claims: 2, prefix: 'VARC01', out: dir, pollMs: 10, pollTimeoutMs: 5000,
+    });
+    expect(result.campaign.status).toBe('active');
+    expect(result.pricing).toBeUndefined();
+    expect(existsSync(pendingFile())).toBe(false);
+    expect(result.codesFile).toBe(join(dir, 'VARC01-codes.csv'));
+    expect(existsSync(result.codesFile!)).toBe(true);
+  });
+
   it('deletes the pending entry on a definitive rejection, a second attempt with a fixed name gets a fresh key', async () => {
     const thisFake = await startCampaignFake({
       onCreate: (req, byKey, byId) => {
@@ -329,7 +392,7 @@ describe('campaign create', () => {
     expect(posts[1].body.name).toBe('Good Name');
   });
 
-  it('refuses to resume a pending entry for a different api or key without --fresh, and sends no request', async () => {
+  it('refuses to resume a pending entry for a different key without --fresh, and never prints any part of it', async () => {
     const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
     fake = thisFake;
 
@@ -338,12 +401,34 @@ describe('campaign create', () => {
       body: { name: 'X', codePrefix: 'X', codeCount: 1, network: 'preprod' }, createdAt: new Date().toISOString(),
     }));
 
-    await expect(campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'NEW001', out: dir })).rejects.toThrow(UsageError);
+    const err = await campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'NEW001', out: dir }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('--fresh');
+    expect(err.message).not.toContain('MISMATCHEDPRE');
+    expect(err.message).not.toContain(TOKEN.slice(0, 12));
     expect(thisFake.calls.length).toBe(0);
 
     const result = await campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'NEW001', out: dir, fresh: true });
     expect(result.campaign.status).toBe('active');
     expect(thisFake.calls.filter(c => c.method === 'POST').length).toBe(1);
+  });
+
+  it('refuses to resume a pending entry for a different api without --fresh, and sends no request', async () => {
+    const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
+    fake = thisFake;
+    const currentTokenPrefix = TOKEN.slice(0, 12);
+
+    writeFileSync(pendingFile(), JSON.stringify({
+      key: 'existing-key', api: 'http://127.0.0.1:1', tokenPrefix: currentTokenPrefix,
+      body: { name: 'X', codePrefix: 'X', codeCount: 1, network: 'preprod' }, createdAt: new Date().toISOString(),
+    }));
+
+    const err = await campaignCreate({ api: thisFake.url, json: false, name: 'New', claims: 1, prefix: 'NEW002', out: dir }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('http://127.0.0.1:1');
+    expect(err.message).toContain(thisFake.url);
+    expect(err.message).toContain('--fresh');
+    expect(thisFake.calls.length).toBe(0);
   });
 
   it('deduplicates a shared code claimed three times into one CSV row and reports 3/60 progress', async () => {
