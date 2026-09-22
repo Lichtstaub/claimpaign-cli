@@ -21,6 +21,7 @@ export function writeConfig(patch: Partial<CliConfig>, remove: (keyof CliConfig)
   const next: CliConfig = { ...readConfig(), ...patch };
   for (const key of remove) delete next[key];
   if (!existsSync(configDir())) mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+  chmodSync(configDir(), 0o700);
   writeFileSync(configPath(), JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
   chmodSync(configPath(), 0o600);
 }

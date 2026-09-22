@@ -1,5 +1,6 @@
 import { writeConfig, resolveApi } from '../config.js';
 import { apiRequest, ApiError } from '../api.js';
+import { CancelledError } from '../output.js';
 
 /**
  * Prompt for a secret without echo. A TTY delivers raw chunks that may hold a pasted
@@ -27,7 +28,7 @@ export function promptSecret(question: string, input: SecretInput = process.stdi
     const onData = (chunk: Buffer) => {
       for (const ch of chunk.toString('utf8')) {
         if (ch === '\r' || ch === '\n') return finish(buffer);
-        if (ch === '\x03') { finish(null, new Error('Cancelled')); process.exitCode = 130; return; }
+        if (ch === '\x03') { finish(null, new CancelledError('Cancelled')); return; }
         if (ch === '\x7f' || ch === '\b') buffer = buffer.slice(0, -1);
         else buffer += ch;
       }

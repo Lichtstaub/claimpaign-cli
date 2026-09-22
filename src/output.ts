@@ -1,5 +1,8 @@
 export class UsageError extends Error {}
 
+/** Thrown by promptSecret() when the user cancels the prompt (Ctrl-C). run() maps this to exit 130. */
+export class CancelledError extends Error {}
+
 export function print(value: unknown, opts: { json: boolean }): void {
   if (opts.json) {
     process.stdout.write(JSON.stringify(value, null, 2) + '\n');

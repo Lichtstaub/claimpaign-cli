@@ -50,6 +50,24 @@ describe('apiRequest', () => {
     }
   });
 
+  it('throws the 429 as an ApiError once retries are exhausted on GET', async () => {
+    let calls = 0;
+    const api = await startFakeApi({
+      'GET /api/org/credits': () => { calls += 1; return { status: 429, body: { error: 'slow down' } }; },
+    });
+    try {
+      const err = await apiRequest({
+        api: api.url, token: TOKEN, method: 'GET', path: '/api/org/credits', retryDelaysMs: [1, 1, 1],
+      }).catch(e => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(429);
+      // the initial attempt plus all three retries
+      expect(calls).toBe(4);
+    } finally {
+      await api.close();
+    }
+  });
+
   it('does not retry a 429 on POST', async () => {
     let calls = 0;
     const api = await startFakeApi({
