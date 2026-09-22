@@ -6,6 +6,7 @@ import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
 import { campaignCreate, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
 import { campaignCodes } from './commands/campaign-codes.js';
+import { claim } from './commands/claim.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -150,10 +151,12 @@ export function buildProgram(): Command {
     });
 
   program
-    .command('claim')
-    .description('Claim a CIP-99 sandbox code')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .command('claim <uri-or-code> <address>')
+    .description('Claim a CIP-99 code on the Cardano preprod testnet')
+    .option('--faucet <url>', 'post a bare code to this faucet url instead of deriving one from --api')
+    .action(async (input: string, address: string, cmdOpts: { faucet?: string }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await claim(input, address, { api: opts.api, json: opts.json, faucet: cmdOpts.faucet });
     });
 
   return program;
