@@ -1,6 +1,7 @@
 import { Command, CommanderError } from 'commander';
 import { createRequire } from 'node:module';
-import { UsageError } from './output.js';
+import { UsageError, CancelledError } from './output.js';
+import { login, logout } from './commands/login.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -15,15 +16,17 @@ export function buildProgram(): Command {
   program
     .command('login')
     .description('Store a sandbox API key')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .action(async () => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await login({ api: opts.api, json: opts.json });
     });
 
   program
     .command('logout')
     .description('Remove the stored sandbox API key')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .action(async () => {
+      await logout();
+      if (!program.opts<{ json: boolean }>().json) process.stdout.write('Logged out.\n');
     });
 
   program
@@ -57,7 +60,7 @@ export function buildProgram(): Command {
   return program;
 }
 
-/** Parse and execute, mapping errors to exit codes: usage 2, runtime and API 1, help and version 0. */
+/** Parse and execute, mapping errors to exit codes: usage 2, runtime and API 1, cancelled prompt 130, help and version 0. */
 export async function run(argv: string[]): Promise<number> {
   try {
     await buildProgram().parseAsync(argv);
@@ -66,6 +69,10 @@ export async function run(argv: string[]): Promise<number> {
     if (err instanceof CommanderError) {
       if (err.code === 'commander.helpDisplayed' || err.code === 'commander.version' || err.code === 'commander.help') return 0;
       return 2; // commander already printed its message
+    }
+    if (err instanceof CancelledError) {
+      process.stderr.write('Cancelled\n');
+      return 130;
     }
     process.stderr.write(`Error: ${(err as Error)?.message ?? String(err)}\n`);
     return err instanceof UsageError ? 2 : 1;
