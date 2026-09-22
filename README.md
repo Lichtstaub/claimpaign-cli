@@ -16,7 +16,7 @@ npm install -g claimpaign
 
 ## Login
 
-Run `claimpaign login` and paste your sandbox API key when prompted. Get a key from Settings, Sandbox API on claimpaign.com, it looks like `cps_` followed by 40 characters. To skip the prompt, for example in CI, set `CLAIMPAIGN_TOKEN` instead, the CLI reads it directly.
+Run `claimpaign login` and paste your sandbox API key when prompted. Get a key from Settings, Sandbox API on claimpaign.com, it looks like `cps_` followed by 40 characters. Setting `CLAIMPAIGN_TOKEN` skips `claimpaign login` entirely, every command reads it before anything else. `claimpaign login` itself always prompts for a key even when the variable is set, its whole purpose is storing a key in the config file.
 
 ## Hackathon flow
 
