@@ -14,19 +14,22 @@ import { startFakeApi, fakeKey } from './helpers/fake-api.js';
 const GOOD = fakeKey('cligood');
 const BAD = fakeKey('clibad');
 
-interface CliResult { status: number | null; stdout: string; stderr: string }
+interface CliResult { status: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
 
+// A 15s timeout so a regression of the stdin dangling handle fails this test instead of
+// hanging the whole suite, the child gets killed and r.signal is non null in that case.
 function runCli(args: string[], input: string, dir: string): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', ['tsx', 'src/bin.ts', ...args], {
       env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir },
+      timeout: 15000,
     });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
     child.on('error', reject);
-    child.on('close', status => resolve({ status, stdout, stderr }));
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr }));
     child.stdin.end(input);
   });
 }
@@ -54,6 +57,7 @@ describe('login and logout through the cli', () => {
     await withDir(async dir => {
       const r = await runCli(['login', '--api', api.url], GOOD + '\n', dir);
       expect(r.status).toBe(0);
+      expect(r.signal).toBeNull();
       expect(readConfigFile(dir)).toEqual({ token: GOOD, api: api.url });
       expect(r.stdout).not.toContain(GOOD);
     });
@@ -83,6 +87,7 @@ describe('login and logout through the cli', () => {
       expect(login.status).toBe(0);
       const r = await runCli(['logout'], '', dir);
       expect(r.status).toBe(0);
+      expect(r.signal).toBeNull();
       expect(r.stdout.trim()).toBe('Logged out.');
       expect(readConfigFile(dir)).toEqual({ api: api.url });
     });

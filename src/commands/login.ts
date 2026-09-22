@@ -9,7 +9,7 @@ import { CancelledError } from '../output.js';
  * or EOF. Raw mode and listeners are cleaned up on every exit path.
  */
 /** Anything readable, with the TTY extras optional so tests can pass a PassThrough. */
-export type SecretInput = NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown; pause(): unknown; resume(): unknown };
+export type SecretInput = NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown; pause(): unknown; resume(): unknown; unref?: () => unknown };
 
 export function promptSecret(question: string, input: SecretInput = process.stdin): Promise<string> {
   process.stderr.write(question);
@@ -22,6 +22,8 @@ export function promptSecret(question: string, input: SecretInput = process.stdi
       input.off('data', onData); input.off('end', onEnd); input.off('error', onError);
       if (isTty) input.setRawMode!(false);
       input.pause();
+      // A read that finished on a line ending, not EOF, leaves the stream open, unref lets the process exit naturally
+      input.unref?.();
       if (isTty) process.stderr.write('\n');
       if (err) reject(err); else resolve((value ?? buffer).trim());
     };
