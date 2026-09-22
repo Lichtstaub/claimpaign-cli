@@ -18,6 +18,9 @@ npm install -g claimpaign
 
 Run `claimpaign login` and paste your sandbox API key when prompted. Get a key from Settings, Sandbox API on claimpaign.com, it looks like `cps_` followed by 40 characters. Setting `CLAIMPAIGN_TOKEN` skips `claimpaign login` entirely, every command reads it before anything else. `claimpaign login` itself always prompts for a key even when the variable is set, its whole purpose is storing a key in the config file.
 
+<img width="800" alt="api-key-settings" src="https://github.com/user-attachments/assets/4c347ed5-eeb6-4fdf-8bf7-3cab5e380b3b" />
+
+
 ## Hackathon flow
 
 1. Deposit test tokens into the org wallet, or top up sandbox credits in the web interface. `claimpaign deposit` shows the wallet address and the top up link.
