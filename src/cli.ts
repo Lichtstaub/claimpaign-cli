@@ -4,6 +4,8 @@ import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
 import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
+import { campaignCreate, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
+import { campaignCodes } from './commands/campaign-codes.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -47,11 +49,104 @@ export function buildProgram(): Command {
       await deposit({ api: opts.api, json: opts.json });
     });
 
-  program
+  const campaign = program
     .command('campaign')
-    .description('Manage sandbox campaigns')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .description('Manage sandbox campaigns');
+
+  campaign
+    .command('create')
+    .description('Create a sandbox campaign and export its codes')
+    .requiredOption('--name <text>', 'campaign name')
+    .requiredOption('--claims <n>', 'number of claim codes')
+    .option('--ada <tADA>', 'ada per claim, in tADA')
+    .option('--token <policy.assethex:qty>', 'token bundle item, repeatable', (value: string, previous: string[]) => [...previous, value], [] as string[])
+    .option('--shared', 'one shared code for every claim', false)
+    .option('--prefix <PREFIX>', 'claim code prefix, derived from the name when omitted')
+    .option('--expires <ISO>', 'expiry timestamp')
+    .option('--description <text>', 'campaign description')
+    .option('--out <dir>', 'directory for the exported codes CSV (default the current directory)')
+    .option('--fresh', 'discard a pending creation attempt and start a new one', false)
+    .action(async (cmdOpts: {
+      name: string; claims: string; ada?: string; token: string[]; shared: boolean;
+      prefix?: string; expires?: string; description?: string; out?: string; fresh: boolean;
+    }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignCreate({
+        api: opts.api,
+        json: opts.json,
+        name: cmdOpts.name,
+        claims: Number(cmdOpts.claims),
+        ada: cmdOpts.ada !== undefined ? Number(cmdOpts.ada) : undefined,
+        token: cmdOpts.token,
+        shared: cmdOpts.shared,
+        prefix: cmdOpts.prefix,
+        expires: cmdOpts.expires,
+        description: cmdOpts.description,
+        out: cmdOpts.out,
+        fresh: cmdOpts.fresh,
+      });
+    });
+
+  campaign
+    .command('list')
+    .description('List sandbox campaigns')
+    .action(async () => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignList({ api: opts.api, json: opts.json });
+    });
+
+  campaign
+    .command('status <id>')
+    .description('Show a sandbox campaign\'s status, progress and claim queue')
+    .action(async (id: string) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignStatus(id, { api: opts.api, json: opts.json });
+    });
+
+  campaign
+    .command('codes <id>')
+    .description('Export a campaign\'s codes as CSV, QR images and/or a print-ready PDF')
+    .option('--csv <file>', 'write a CSV file')
+    .option('--qr-dir <dir>', 'write one QR PNG per code into this directory')
+    .option('--pdf <file>', 'write a print-ready PDF with one card per code')
+    .option('--fallback', 'use the HTTPS fallback URL instead of the wallet deep link for QR and PDF', false)
+    .option('--all', 'include already claimed codes', false)
+    .action(async (id: string, cmdOpts: { csv?: string; qrDir?: string; pdf?: string; fallback: boolean; all: boolean }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignCodes(id, {
+        api: opts.api,
+        json: opts.json,
+        csv: cmdOpts.csv,
+        qrDir: cmdOpts.qrDir,
+        pdf: cmdOpts.pdf,
+        fallback: cmdOpts.fallback,
+        all: cmdOpts.all,
+      });
+    });
+
+  campaign
+    .command('end <id>')
+    .description('End a sandbox campaign and refund unclaimed credits')
+    .option('--wait', 'keep retrying while payouts are settling', false)
+    .action(async (id: string, cmdOpts: { wait: boolean }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignEnd(id, { api: opts.api, json: opts.json, wait: cmdOpts.wait });
+    });
+
+  campaign
+    .command('pause <id>')
+    .description('Pause a sandbox campaign')
+    .action(async (id: string) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignPause(id, { api: opts.api, json: opts.json });
+    });
+
+  campaign
+    .command('resume <id>')
+    .description('Resume a paused sandbox campaign')
+    .action(async (id: string) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignResume(id, { api: opts.api, json: opts.json });
     });
 
   program
