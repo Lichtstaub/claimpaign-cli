@@ -24,7 +24,8 @@ export async function balance(opts: { api?: string; json: boolean }): Promise<vo
   const ownTokens = walletBody.tokens.filter(t => !t.platform);
   const platformTokens = walletBody.tokens.filter(t => t.platform);
   const rows = [...ownTokens, ...platformTokens].map(t => ({
-    Token: t.assetNameUtf8 + (t.platform ? ' (platform)' : ''),
+    // Asset names with a CIP-68 label or binary bytes must not break the table
+    Token: t.assetNameUtf8.replace(/[\x00-\x1f\x7f\ufffd]/g, '') + (t.platform ? ' (platform)' : ''),
     Available: t.available,
     Reserved: t.reserved,
     Settling: t.inFlight,
