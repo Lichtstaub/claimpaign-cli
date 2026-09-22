@@ -57,8 +57,8 @@ export function buildProgram(): Command {
   campaign
     .command('create')
     .description('Create a sandbox campaign and export its codes')
-    .requiredOption('--name <text>', 'campaign name')
-    .requiredOption('--claims <n>', 'number of claim codes')
+    .option('--name <text>', 'campaign name, required to start a new campaign, not needed to resume a pending one')
+    .option('--claims <n>', 'number of claim codes, required to start a new campaign, not needed to resume a pending one')
     .option('--ada <tADA>', 'ada per claim, in tADA')
     .option('--token <policy.assethex:qty>', 'token bundle item, repeatable', (value: string, previous: string[]) => [...previous, value], [] as string[])
     .option('--shared', 'one shared code for every claim', false)
@@ -68,7 +68,7 @@ export function buildProgram(): Command {
     .option('--out <dir>', 'directory for the exported codes CSV (default the current directory)')
     .option('--fresh', 'discard a pending creation attempt and start a new one', false)
     .action(async (cmdOpts: {
-      name: string; claims: string; ada?: string; token: string[]; shared: boolean;
+      name?: string; claims?: string; ada?: string; token: string[]; shared: boolean;
       prefix?: string; expires?: string; description?: string; out?: string; fresh: boolean;
     }) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
@@ -76,7 +76,7 @@ export function buildProgram(): Command {
         api: opts.api,
         json: opts.json,
         name: cmdOpts.name,
-        claims: Number(cmdOpts.claims),
+        claims: cmdOpts.claims !== undefined ? Number(cmdOpts.claims) : undefined,
         ada: cmdOpts.ada !== undefined ? Number(cmdOpts.ada) : undefined,
         token: cmdOpts.token,
         shared: cmdOpts.shared,

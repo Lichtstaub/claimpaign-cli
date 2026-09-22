@@ -94,4 +94,16 @@ describe('apiRequest', () => {
     });
     expect(res.status).toBe(409);
   });
+
+  it('times out and rejects with ApiError once the request runs past timeoutMs', async () => {
+    api = await startFakeApi({
+      'GET /api/org/credits': () => new Promise(resolve => setTimeout(() => resolve({ status: 200, body: { ok: true } }), 500)),
+    });
+    const err = await apiRequest({
+      api: api.url, token: TOKEN, method: 'GET', path: '/api/org/credits', timeoutMs: 50,
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(0);
+    expect(err.message).toContain('Timed out');
+  });
 });

@@ -27,8 +27,8 @@ const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
 export interface CampaignCreateOpts {
   api?: string;
   json: boolean;
-  name: string;
-  claims: number;
+  name?: string;
+  claims?: number;
   ada?: number;
   token?: string[];
   shared?: boolean;
@@ -121,11 +121,11 @@ function parseTokenArg(raw: string): TokenBundleItem {
   return { unit: `${policyId}.${assetNameHex}`.toLowerCase(), quantity };
 }
 
-function buildRequestBody(opts: CampaignCreateOpts, prefix: string): CampaignCreateRequestBody {
+function buildRequestBody(opts: CampaignCreateOpts, name: string, claims: number, prefix: string): CampaignCreateRequestBody {
   const body: CampaignCreateRequestBody = {
-    name: opts.name,
+    name,
     codePrefix: prefix,
-    codeCount: opts.claims,
+    codeCount: claims,
     network: 'preprod',
   };
   if (opts.ada !== undefined) body.adaPerClaim = Math.round(opts.ada * 1_000_000);
@@ -244,10 +244,12 @@ export async function campaignCreate(opts: CampaignCreateOpts): Promise<Campaign
     process.stderr.write(`Resuming the previous creation from ${pending.createdAt} (key ${pending.key.slice(0, 8)}...)\n`);
     if (ageHours >= 24) process.stderr.write(`This attempt is ${ageHours} hours old.\n`);
   } else {
-    if (!Number.isInteger(opts.claims) || opts.claims <= 0) throw new UsageError('--claims must be a positive integer');
+    const { name, claims } = opts;
+    if (!name || claims === undefined) throw new UsageError('--name and --claims are required to create a new campaign');
+    if (!Number.isInteger(claims) || claims <= 0) throw new UsageError('--claims must be a positive integer');
     if (opts.ada !== undefined && (!Number.isFinite(opts.ada) || opts.ada < 0)) throw new UsageError('--ada must be a non negative number');
-    const prefix = opts.prefix || derivePrefix(opts.name);
-    body = buildRequestBody(opts, prefix);
+    const prefix = opts.prefix || derivePrefix(name);
+    body = buildRequestBody(opts, name, claims, prefix);
     key = randomUUID();
     writePendingEntry({ key, api, tokenHash, body, createdAt: new Date().toISOString() });
   }

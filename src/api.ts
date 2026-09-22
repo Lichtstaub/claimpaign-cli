@@ -10,6 +10,7 @@ export interface ApiRequestOptions {
   headers?: Record<string, string>;
   allow?: number[];
   retryDelaysMs?: number[];
+  timeoutMs?: number;
 }
 
 export interface ApiResponse<T> {
@@ -31,6 +32,7 @@ export class ApiError extends Error {
 }
 
 const DEFAULT_RETRY_DELAYS_MS = [2000, 4000, 8000];
+const DEFAULT_TIMEOUT_MS = 30_000;
 const RETRYABLE_METHODS = new Set(['GET', 'PATCH']);
 
 export function sleep(ms: number): Promise<void> {
@@ -52,9 +54,11 @@ function messageFromBody(body: unknown, status: number): string {
  * `retryDelaysMs` (default 2s, 4s, 8s), up to as many retries as the array has entries.
  * A status of 400 or above becomes an `ApiError`, unless it is listed in `allow`, in which
  * case the response is returned like any success. A network failure becomes `ApiError(0, ...)`.
+ * The request is aborted after `timeoutMs` (default 30s), which becomes `ApiError(0, ...)`
+ * with a message naming the timeout instead of the generic unreachable one.
  */
 export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promise<ApiResponse<T>> {
-  const { api, token, method, path, body, headers, allow = [], retryDelaysMs = DEFAULT_RETRY_DELAYS_MS } = options;
+  const { api, token, method, path, body, headers, allow = [], retryDelaysMs = DEFAULT_RETRY_DELAYS_MS, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
   const url = `${api}${path}`;
   const requestHeaders: Record<string, string> = { ...headers };
   if (token) requestHeaders.authorization = `Bearer ${token}`;
@@ -70,6 +74,7 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
         method,
         headers: requestHeaders,
         body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(timeoutMs),
       });
       status = response.status;
       const text = await response.text();
@@ -78,7 +83,11 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       } catch {
         parsedBody = text;
       }
-    } catch {
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        throw new ApiError(0, `Timed out after ${timeoutMs / 1000}s waiting for ${api}`);
+      }
       throw new ApiError(0, `Could not reach ${api}`);
     }
 

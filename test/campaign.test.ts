@@ -547,6 +547,58 @@ describe('campaign create', () => {
     expect(err).toBeInstanceOf(UsageError);
     expect(err.message).toContain('Not logged in');
   });
+
+  it('resumes a pending creation without --name or --claims after a poll timeout', async () => {
+    const thisFake = await startCampaignFake({
+      onCreate: (req, byKey, byId) => {
+        const key = req.headers['idempotency-key'] as string;
+        const existingId = byKey.get(key);
+        if (existingId) {
+          const c = byId.get(existingId)!;
+          if (c.status === 'creating') return { status: 202, body: { campaign: { id: c.id, status: 'creating' }, pending: true, idempotent: true } };
+          return { status: 200, body: { campaign: { id: c.id, status: c.status }, codes: c.codes, idempotent: true } };
+        }
+        const id = 'camp-resume-noargs';
+        const prefix = req.body.codePrefix as string;
+        const codes = makeCodes(prefix, req.body.codeCount as number);
+        byKey.set(key, id);
+        byId.set(id, { id, status: 'creating', prefix, codeMode: 'unique', totalCodes: req.body.codeCount, codes, codesClaimed: 0 });
+        return { status: 202, body: { campaign: { id, status: 'creating' }, codes, pending: true, message: 'Funding is awaiting settlement.' } };
+      },
+    });
+    fake = thisFake;
+
+    await expect(campaignCreate({
+      api: thisFake.url, json: false, name: 'Resume Args', claims: 2, prefix: 'RESAR1', out: dir, pollMs: 10, pollTimeoutMs: 30,
+    })).rejects.toThrow(/settling/);
+    expect(existsSync(pendingFile())).toBe(true);
+
+    thisFake.byId.get('camp-resume-noargs')!.status = 'active';
+
+    const result = await campaignCreate({ api: thisFake.url, json: false, out: dir, pollMs: 10, pollTimeoutMs: 30 });
+    expect(result.campaign.id).toBe('camp-resume-noargs');
+    expect(existsSync(pendingFile())).toBe(false);
+  });
+
+  it('throws the new UsageError when there is no pending entry and --name is missing, sending no request', async () => {
+    const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
+    fake = thisFake;
+
+    const err = await campaignCreate({ api: thisFake.url, json: false, claims: 5, out: dir }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toBe('--name and --claims are required to create a new campaign');
+    expect(thisFake.calls.length).toBe(0);
+  });
+
+  it('throws the new UsageError when there is no pending entry and --claims is missing, sending no request', async () => {
+    const thisFake = await startCampaignFake({ onCreate: standardOnCreate() });
+    fake = thisFake;
+
+    const err = await campaignCreate({ api: thisFake.url, json: false, name: 'No Claims', out: dir }).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toBe('--name and --claims are required to create a new campaign');
+    expect(thisFake.calls.length).toBe(0);
+  });
 });
 
 describe('campaign list', () => {
