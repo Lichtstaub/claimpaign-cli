@@ -22,6 +22,8 @@ const PREFIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const TOKEN_ARG = /^([a-f0-9]{56})\.([a-f0-9]*):([0-9]+)$/;
 const DEFAULT_POLL_MS = 10_000;
 const DEFAULT_POLL_TIMEOUT_MS = 900_000;
+const DEFAULT_END_WAIT_MS = 20_000;
+const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
 /** Safety cap on paginated fetches, in case a server response carries a bad or huge pages value. */
 const MAX_PAGES = 1000;
 
@@ -461,4 +463,76 @@ export async function campaignCodes(id: string, opts: CampaignCodesOpts): Promis
   if (result.qrDir) lines.push(`Wrote ${items.length} QR images to ${result.qrDir}`);
   if (result.pdf) lines.push(`Wrote ${items.length} codes to ${result.pdf}`);
   print(lines.join('\n'), { json: false });
+}
+
+/** Pulls the server's error text out of a management endpoint's error body, empty string when it has none. */
+function errorText(body: unknown): string {
+  if (body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string') {
+    return (body as { error: string }).error;
+  }
+  return '';
+}
+
+export interface CampaignEndOpts {
+  api?: string;
+  json: boolean;
+  wait?: boolean;
+  waitMs?: number;
+  waitTimeoutMs?: number;
+}
+
+/**
+ * Ends a sandbox campaign. A 409 that names payouts as closing means the campaign is
+ * mid settlement, without --wait this fails fast, with --wait it retries every waitMs
+ * (default 20s) until the server accepts the end or waitTimeoutMs (default 15 minutes)
+ * runs out. Any other 409 or a 400 propagates as an ApiError with the server's text.
+ */
+export async function campaignEnd(id: string, opts: CampaignEndOpts): Promise<void> {
+  const token = requireToken();
+  const api = resolveApi(opts.api);
+  const waitMs = opts.waitMs ?? DEFAULT_END_WAIT_MS;
+  const waitTimeoutMs = opts.waitTimeoutMs ?? DEFAULT_END_WAIT_TIMEOUT_MS;
+  const deadline = Date.now() + waitTimeoutMs;
+
+  for (;;) {
+    const res = await apiRequest<{ ok: boolean; status: string; refunded: number }>({
+      api, token, method: 'PATCH', path: `/api/admin/campaign/${id}`, body: { status: 'ended' }, allow: [409],
+    });
+
+    if (res.status === 200) {
+      if (opts.json) print(res.body, { json: true });
+      else print(`Campaign ${id} ended, refunded ${formatAda(res.body.refunded)} tADA`, { json: false });
+      return;
+    }
+
+    const message = errorText(res.body);
+    if (!message.includes('closing')) throw new ApiError(409, message || 'HTTP 409', res.body);
+    if (!opts.wait) throw new Error('Payouts are still settling, run again with --wait');
+    if (Date.now() >= deadline) {
+      throw new Error(`Campaign ${id} payouts are still settling after ${Math.round(waitTimeoutMs / 60_000)} minutes. Run again to keep waiting.`);
+    }
+    process.stderr.write('Payouts are still settling, retrying...\n');
+    await sleep(waitMs);
+  }
+}
+
+/** Pauses or resumes a sandbox campaign. A 409 for an invalid transition propagates as an ApiError with the server's text. */
+async function setCampaignStatus(id: string, status: 'paused' | 'active', opts: { api?: string; json: boolean }, verb: string): Promise<void> {
+  const token = requireToken();
+  const api = resolveApi(opts.api);
+
+  const { body } = await apiRequest<{ ok: boolean; status: string }>({
+    api, token, method: 'PATCH', path: `/api/admin/campaign/${id}`, body: { status },
+  });
+
+  if (opts.json) print(body, { json: true });
+  else print(`Campaign ${id} ${verb}`, { json: false });
+}
+
+export async function campaignPause(id: string, opts: { api?: string; json: boolean }): Promise<void> {
+  await setCampaignStatus(id, 'paused', opts, 'paused');
+}
+
+export async function campaignResume(id: string, opts: { api?: string; json: boolean }): Promise<void> {
+  await setCampaignStatus(id, 'active', opts, 'resumed');
 }

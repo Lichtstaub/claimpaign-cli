@@ -4,7 +4,7 @@ import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
 import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
-import { campaignCreate, campaignList, campaignStatus, campaignCodes } from './commands/campaign.js';
+import { campaignCreate, campaignList, campaignStatus, campaignCodes, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -121,6 +121,31 @@ export function buildProgram(): Command {
         fallback: cmdOpts.fallback,
         all: cmdOpts.all,
       });
+    });
+
+  campaign
+    .command('end <id>')
+    .description('End a sandbox campaign and refund unclaimed credits')
+    .option('--wait', 'keep retrying while payouts are settling', false)
+    .action(async (id: string, cmdOpts: { wait: boolean }) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignEnd(id, { api: opts.api, json: opts.json, wait: cmdOpts.wait });
+    });
+
+  campaign
+    .command('pause <id>')
+    .description('Pause a sandbox campaign')
+    .action(async (id: string) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignPause(id, { api: opts.api, json: opts.json });
+    });
+
+  campaign
+    .command('resume <id>')
+    .description('Resume a paused sandbox campaign')
+    .action(async (id: string) => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await campaignResume(id, { api: opts.api, json: opts.json });
     });
 
   program

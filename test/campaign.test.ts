@@ -3,8 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeApi, fakeKey, type FakeReq } from './helpers/fake-api.js';
-import { campaignCreate, campaignList, campaignStatus } from '../src/commands/campaign.js';
+import { campaignCreate, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from '../src/commands/campaign.js';
 import { UsageError } from '../src/output.js';
+import { ApiError } from '../src/api.js';
 
 const TOKEN = fakeKey('campaign');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -538,5 +539,144 @@ describe('campaign status', () => {
     await campaignStatus('camp-9', { api: thisFake.url, json: true });
     const parsed = JSON.parse(output.join(''));
     expect(parsed.campaign.id).toBe('camp-9');
+  });
+});
+
+describe('campaign end', () => {
+  it('prints the refund in tADA on 200, sending only { status: "ended" }', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-1': req => {
+        expect(req.body).toEqual({ status: 'ended' });
+        return { status: 200, body: { ok: true, status: 'ended', refunded: 12_500_000 } };
+      },
+    });
+    fake = thisFake;
+
+    await campaignEnd('camp-end-1', { api: thisFake.url, json: false });
+    expect(output.join('')).toBe('Campaign camp-end-1 ended, refunded 12.50 tADA\n');
+  });
+
+  it('prints the raw 200 body with --json', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-json': () => ({ status: 200, body: { ok: true, status: 'ended', refunded: 1_000_000 } }),
+    });
+    fake = thisFake;
+
+    await campaignEnd('camp-end-json', { api: thisFake.url, json: true });
+    const parsed = JSON.parse(output.join(''));
+    expect(parsed).toEqual({ ok: true, status: 'ended', refunded: 1_000_000 });
+  });
+
+  it('throws the settling message on a 409 with "closing" in the text, without --wait', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-2': () => ({ status: 409, body: { error: 'Payouts are closing, try again shortly' } }),
+    });
+    fake = thisFake;
+
+    await expect(campaignEnd('camp-end-2', { api: thisFake.url, json: false }))
+      .rejects.toThrow('Payouts are still settling, run again with --wait');
+  });
+
+  it('retries every waitMs on a closing 409 with --wait, succeeding once the server returns 200', async () => {
+    let calls = 0;
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-3': () => {
+        calls += 1;
+        if (calls === 1) return { status: 409, body: { error: 'Payouts are closing' } };
+        return { status: 200, body: { ok: true, status: 'ended', refunded: 5_000_000 } };
+      },
+    });
+    fake = thisFake;
+
+    await campaignEnd('camp-end-3', { api: thisFake.url, json: false, wait: true, waitMs: 10 });
+    expect(calls).toBe(2);
+    expect(output.join('')).toContain('refunded 5.00 tADA');
+    expect(errOutput.join('')).toContain('Payouts are still settling, retrying...');
+  });
+
+  it('propagates a non closing 409 as an ApiError with the server text', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-4': () => ({ status: 409, body: { error: 'Campaign is already paused, cannot end' } }),
+    });
+    fake = thisFake;
+
+    const err = await campaignEnd('camp-end-4', { api: thisFake.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe('Campaign is already paused, cannot end');
+  });
+
+  it('propagates a 400 as an ApiError with the server text', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-end-5': () => ({ status: 400, body: { error: 'Campaign is already ended' } }),
+    });
+    fake = thisFake;
+
+    const err = await campaignEnd('camp-end-5', { api: thisFake.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe('Campaign is already ended');
+  });
+
+  it('throws Not logged in without a stored token', async () => {
+    delete process.env.CLAIMPAIGN_TOKEN;
+    await expect(campaignEnd('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
+  });
+});
+
+describe('campaign pause and resume', () => {
+  it('pauses with exactly { status: "paused" } and prints a confirmation', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-pause-1': req => {
+        expect(req.body).toEqual({ status: 'paused' });
+        return { status: 200, body: { ok: true, status: 'paused' } };
+      },
+    });
+    fake = thisFake;
+
+    await campaignPause('camp-pause-1', { api: thisFake.url, json: false });
+    expect(output.join('')).toBe('Campaign camp-pause-1 paused\n');
+  });
+
+  it('resumes with exactly { status: "active" } and prints a confirmation', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-resume-1': req => {
+        expect(req.body).toEqual({ status: 'active' });
+        return { status: 200, body: { ok: true, status: 'active' } };
+      },
+    });
+    fake = thisFake;
+
+    await campaignResume('camp-resume-1', { api: thisFake.url, json: false });
+    expect(output.join('')).toBe('Campaign camp-resume-1 resumed\n');
+  });
+
+  it('passes a 409 from pausing an ended campaign through as an ApiError with the server text', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-pause-2': () => ({ status: 409, body: { error: 'Campaign is ended, cannot set paused' } }),
+    });
+    fake = thisFake;
+
+    const err = await campaignPause('camp-pause-2', { api: thisFake.url, json: false }).catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe('Campaign is ended, cannot set paused');
+  });
+
+  it('prints the raw body with --json for both pause and resume', async () => {
+    const thisFake = await startFakeApi({
+      'PATCH /api/admin/campaign/camp-pr-json': req => ({ status: 200, body: { ok: true, status: req.body.status } }),
+    });
+    fake = thisFake;
+
+    await campaignPause('camp-pr-json', { api: thisFake.url, json: true });
+    expect(JSON.parse(output.join(''))).toEqual({ ok: true, status: 'paused' });
+
+    output = [];
+    await campaignResume('camp-pr-json', { api: thisFake.url, json: true });
+    expect(JSON.parse(output.join(''))).toEqual({ ok: true, status: 'active' });
+  });
+
+  it('throws Not logged in without a stored token', async () => {
+    delete process.env.CLAIMPAIGN_TOKEN;
+    await expect(campaignPause('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
+    await expect(campaignResume('camp-x', { api: 'http://127.0.0.1:1', json: false })).rejects.toThrow('Not logged in');
   });
 });
