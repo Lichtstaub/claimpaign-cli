@@ -2,6 +2,8 @@ import { Command, CommanderError } from 'commander';
 import { createRequire } from 'node:module';
 import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
+import { balance } from './commands/balance.js';
+import { deposit } from './commands/deposit.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -32,15 +34,17 @@ export function buildProgram(): Command {
   program
     .command('balance')
     .description('Show the sandbox credit balance')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .action(async () => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await balance({ api: opts.api, json: opts.json });
     });
 
   program
     .command('deposit')
     .description('Add sandbox credits to the organization')
-    .action(() => {
-      throw new Error('not implemented yet');
+    .action(async () => {
+      const opts = program.opts<{ api?: string; json: boolean }>();
+      await deposit({ api: opts.api, json: opts.json });
     });
 
   program
