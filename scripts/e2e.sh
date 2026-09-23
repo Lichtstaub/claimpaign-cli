@@ -105,8 +105,13 @@ run_smoke() {
   $CLI deposit
 
   echo "-- campaign create points to the web interface --"
-  if $CLI campaign create >/dev/null 2>&1; then
-    echo "campaign create should exit with an error since 0.2.0" >&2
+  local create_err create_exit
+  set +e
+  create_err="$($CLI campaign create 2>&1 >/dev/null)"
+  create_exit=$?
+  set -e
+  if [ "$create_exit" -ne 1 ] || ! echo "$create_err" | grep -q '/admin/create/'; then
+    echo "campaign create should exit 1 and print a /admin/create/ link, got exit $create_exit and stderr: $create_err" >&2
     exit 1
   fi
 
@@ -150,7 +155,7 @@ run_full() {
   start_claimed="$(json_field "$start_out" 'd.campaign.codes_claimed')"
   start_total="$(json_field "$start_out" 'd.campaign.total_codes')"
   start_status="$(json_field "$start_out" 'd.campaign.status')"
-  if [ "$start_status" != "active" ] || [ "$start_claimed" -ne 0 ] || [ "$start_total" -lt "$FULL_CLAIM_COUNT" ]; then
+  if ! [[ "$start_claimed" =~ ^[0-9]+$ ]] || ! [[ "$start_total" =~ ^[0-9]+$ ]] || [ "$start_status" != "active" ] || [ "$start_claimed" -ne 0 ] || [ "$start_total" -lt "$FULL_CLAIM_COUNT" ]; then
     echo "E2E_FULL_CAMPAIGN_ID must be an active campaign with $FULL_CLAIM_COUNT codes and no claims yet (status $start_status, claimed $start_claimed, codes $start_total)" >&2
     exit 1
   fi

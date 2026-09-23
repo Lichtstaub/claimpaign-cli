@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeApi, fakeKey } from './helpers/fake-api.js';
@@ -46,20 +46,22 @@ describe('campaign create', () => {
     expect(() => campaignCreateMoved({ api: fake!.url, json: false })).toThrow(`${fake!.url}/admin/create/`);
     expect(fake!.calls).toEqual([]);
     expect(errOutput.join('')).toBe('');
+    expect(existsSync(pendingFile())).toBe(false);
   });
 
-  it('reports a pending creation left by an earlier version and keeps the file', () => {
-    writeFileSync(pendingFile(), JSON.stringify({
+  it('reports a pending creation left by an earlier version and keeps the file unchanged', () => {
+    const pendingContent = JSON.stringify({
       key: 'k-1', api: 'https://claimpaign.com', tokenHash: 'abcdef012345', createdAt: '2026-09-20T10:00:00.000Z',
       body: { name: 'Hack Day', codePrefix: 'HACKDAYAB', codeCount: 50, network: 'preprod' },
-    }));
+    });
+    writeFileSync(pendingFile(), pendingContent);
     expect(() => campaignCreateMoved({ api: 'https://claimpaign.com', json: false })).toThrow('web interface');
     const err = errOutput.join('');
     expect(err).toContain('"Hack Day"');
     expect(err).toContain('HACKDAYAB');
     expect(err).toContain('50 codes');
     expect(err).toContain('claimpaign campaign list');
-    expect(existsSync(pendingFile())).toBe(true);
+    expect(readFileSync(pendingFile(), 'utf8')).toBe(pendingContent);
   });
 
   it('prints the link and the pending creation as json before failing', () => {
@@ -84,6 +86,7 @@ describe('campaign create', () => {
   it('needs no login', () => {
     delete process.env.CLAIMPAIGN_TOKEN;
     expect(() => campaignCreateMoved({ api: 'https://claimpaign.com', json: false })).toThrow('web interface');
+    expect(existsSync(pendingFile())).toBe(false);
   });
 });
 

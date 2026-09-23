@@ -11,19 +11,18 @@ import type { CampaignCode, CampaignFields, CampaignGetResponseBody } from '../a
  */
 export const MAX_PAGES = 1000;
 
-/** Shared with campaign.ts, so a freshly created campaign's CSV lines up with campaign codes. */
-export const CSV_COLUMNS = ['code', 'status', 'claim_uri', 'fallback_url'];
+/** Column order for the codes CSV export. */
+const CSV_COLUMNS = ['code', 'status', 'claim_uri', 'fallback_url'];
 
 /**
  * Fetches every page of a campaign's codes and deduplicates by code (shared campaigns
- * report their one code once per claim). Accepts an already fetched first page to avoid
- * refetching it when the caller has just polled the campaign into existence.
+ * report their one code once per claim).
  */
 export async function loadAllCodes(params: {
-  api: string; token: string; campaignId: string; firstPage?: CampaignGetResponseBody;
+  api: string; token: string; campaignId: string;
 }): Promise<{ campaign: CampaignFields; codes: CampaignCode[] }> {
   const { api, token, campaignId } = params;
-  const first = params.firstPage ?? (await apiRequest<CampaignGetResponseBody>({
+  const first = (await apiRequest<CampaignGetResponseBody>({
     api, token, method: 'GET', path: `/api/admin/campaign/${campaignId}?page=1&limit=200`,
   })).body;
 
