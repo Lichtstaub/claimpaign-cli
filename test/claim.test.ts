@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { startFakeApi } from './helpers/fake-api.js';
 import { claim } from '../src/commands/claim.js';
 import { UsageError } from '../src/output.js';
@@ -8,9 +11,12 @@ const MAINNET_ADDRESS = 'addr1qzown0wnwallet';
 
 let api: Awaited<ReturnType<typeof startFakeApi>>;
 let output: string[];
+let dir: string;
 
 beforeEach(() => {
   output = [];
+  dir = mkdtempSync(join(tmpdir(), 'cp-claim-'));
+  process.env.CLAIMPAIGN_CONFIG_DIR = dir;
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => { output.push(String(chunk)); return true; });
 });
 
@@ -20,6 +26,8 @@ afterEach(async () => {
     expect(api.errors, 'fake api handler threw').toEqual([]);
     await api.close();
   }
+  rmSync(dir, { recursive: true, force: true });
+  delete process.env.CLAIMPAIGN_CONFIG_DIR;
 });
 
 describe('claim', () => {
