@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => { output.push(String(chunk)); return true; });
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   dir = mkdtempSync(join(tmpdir(), 'cp-export-'));
+  process.env.CLAIMPAIGN_CONFIG_DIR = dir;
   process.env.CLAIMPAIGN_TOKEN = TOKEN;
   fake = undefined;
 });
@@ -31,6 +32,7 @@ afterEach(async () => {
     await fake.close();
   }
   rmSync(dir, { recursive: true, force: true });
+  delete process.env.CLAIMPAIGN_CONFIG_DIR;
   delete process.env.CLAIMPAIGN_TOKEN;
 });
 
