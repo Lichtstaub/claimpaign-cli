@@ -82,6 +82,16 @@ npm test
 
 `scripts/e2e.sh` runs an end to end test against a real API, not part of `npm test`. It needs `CLAIMPAIGN_API`, `CLAIMPAIGN_TOKEN` and `E2E_ADDRESSES` (a file with one `addr_test` address per line) as environment variables. The default run is a smoke test, `--full` adds a 60 claim acceptance run, `--foreign` adds a claim against an external CIP-99 faucet and needs `E2E_FOREIGN_URI` (a CIP-99 claim uri, for example the tUSDM preprod faucet).
 
+## Releasing
+
+Releases are published to npm by the release workflow, never from a local machine.
+
+1. Bump the version on a branch with `npm version patch --no-git-tag-version` (or `minor`), open a PR and squash merge it.
+2. Tag the merge commit on `main` and push the tag: `git tag -a v0.1.1 -m v0.1.1 && git push origin v0.1.1`.
+3. Approve the staged version on npmjs.com under Staged Packages (asks for 2FA). Only then is it installable.
+
+The workflow checks that the tag matches `package.json` and sits on `main`, runs typecheck, tests and build, stages the version on npm with provenance and creates the GitHub release. If the workflow fails after staging, approve the staged version first and then rerun it, it skips npm when that version already came from the same commit.
+
 ## Documentation
 
 https://claimpaign.com/docs
