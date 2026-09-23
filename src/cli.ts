@@ -4,7 +4,7 @@ import { UsageError, CancelledError } from './output.js';
 import { login, logout } from './commands/login.js';
 import { balance } from './commands/balance.js';
 import { deposit } from './commands/deposit.js';
-import { campaignCreate, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
+import { campaignCreateMoved, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
 import { campaignCodes } from './commands/campaign-codes.js';
 import { claim } from './commands/claim.js';
 
@@ -56,36 +56,13 @@ export function buildProgram(): Command {
 
   campaign
     .command('create')
-    .description('Create a sandbox campaign and export its codes')
-    .option('--name <text>', 'campaign name, required to start a new campaign, not needed to resume a pending one')
-    .option('--claims <n>', 'number of claim codes, required to start a new campaign, not needed to resume a pending one')
-    .option('--ada <tADA>', 'ada per claim, in tADA')
-    .option('--token <policy.assethex:qty>', 'token bundle item, repeatable', (value: string, previous: string[]) => [...previous, value], [] as string[])
-    .option('--shared', 'one shared code for every claim', false)
-    .option('--prefix <PREFIX>', 'claim code prefix, derived from the name when omitted')
-    .option('--expires <ISO>', 'expiry timestamp')
-    .option('--description <text>', 'campaign description')
-    .option('--out <dir>', 'directory for the exported codes CSV (default the current directory)')
-    .option('--fresh', 'discard a pending creation attempt and start a new one', false)
-    .action(async (cmdOpts: {
-      name?: string; claims?: string; ada?: string; token: string[]; shared: boolean;
-      prefix?: string; expires?: string; description?: string; out?: string; fresh: boolean;
-    }) => {
+    .description('Moved to the web interface, prints the link')
+    // 0.1.x options and arguments are accepted and ignored, so old scripts get the link instead of a usage error
+    .allowUnknownOption()
+    .allowExcessArguments()
+    .action(() => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignCreate({
-        api: opts.api,
-        json: opts.json,
-        name: cmdOpts.name,
-        claims: cmdOpts.claims !== undefined ? Number(cmdOpts.claims) : undefined,
-        ada: cmdOpts.ada !== undefined ? Number(cmdOpts.ada) : undefined,
-        token: cmdOpts.token,
-        shared: cmdOpts.shared,
-        prefix: cmdOpts.prefix,
-        expires: cmdOpts.expires,
-        description: cmdOpts.description,
-        out: cmdOpts.out,
-        fresh: cmdOpts.fresh,
-      });
+      campaignCreateMoved({ api: opts.api, json: opts.json });
     });
 
   campaign
