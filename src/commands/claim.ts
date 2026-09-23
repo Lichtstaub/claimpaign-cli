@@ -65,13 +65,13 @@ function formatAccepted(body: ClaimResponseBody): string {
   return parts.join(', ');
 }
 
-/** Claims a CIP-99 code on the Cardano preprod testnet. No login, no bearer header sent. */
+/** Claims a CIP-99 code to a Cardano testnet address. No login, no bearer header sent. */
 export async function claim(input: string, address: string, opts: { api?: string; json: boolean; faucet?: string }): Promise<void> {
   const api = resolveApi(opts.api);
   const { faucetUrl, code } = resolveClaimTarget(input, opts.faucet, api);
 
   if (!address.startsWith('addr_test')) {
-    throw new UsageError('This tool claims on the Cardano preprod testnet only, mainnet addresses (addr1...) are not accepted.');
+    throw new UsageError('This tool claims to Cardano testnet addresses (addr_test...) only, mainnet addresses (addr1...) are not accepted.');
   }
 
   const url = new URL(faucetUrl);

@@ -11,7 +11,7 @@
 #                      scripts/derive-test-addresses.ts --from 1 --to 61 in the
 #                      claimpaign.com repo. Line 61 is reserved for the --foreign stage.
 #   E2E_CAMPAIGN_ID   id of an ada campaign with at least one unclaimed code, created in the
-#                      web interface (campaign create only prints the link since 0.2.0). The
+#                      web interface (create only prints the link). The
 #                      smoke stage ends this campaign, create a fresh one before every run.
 #
 # Optional:
@@ -50,7 +50,7 @@ Required environment variables:
                      produced by scripts/derive-test-addresses.ts --from 1 --to 61 in the
                      claimpaign.com repo (line 61 is reserved for the --foreign stage)
   E2E_CAMPAIGN_ID   id of an ada campaign with at least one unclaimed code, created in the
-                     web interface (campaign create only prints the link since 0.2.0). The
+                     web interface (create only prints the link). The
                      smoke stage ends this campaign, create a fresh one before every run.
 
 Optional:
@@ -64,7 +64,7 @@ Optional:
                      web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
 
 Flags:
-  --full      also run 60 claims spaced 0.6 seconds apart, then poll campaign status
+  --full      also run 60 claims spaced 0.6 seconds apart, then poll status
               until all 60 are settled
   --foreign   also claim from an external CIP-99 faucet with the last address in
               E2E_ADDRESSES, using the uri in E2E_FOREIGN_URI
@@ -104,22 +104,22 @@ run_smoke() {
   echo "-- deposit --"
   $CLI deposit
 
-  echo "-- campaign create points to the web interface --"
+  echo "-- create points to the web interface --"
   local create_err create_exit
   set +e
-  create_err="$($CLI campaign create 2>&1 >/dev/null)"
+  create_err="$($CLI create 2>&1 >/dev/null)"
   create_exit=$?
   set -e
   if [ "$create_exit" -ne 1 ] || ! echo "$create_err" | grep -q '/admin/create/'; then
-    echo "campaign create should exit 1 and print a /admin/create/ link, got exit $create_exit and stderr: $create_err" >&2
+    echo "create should exit 1 and print a /admin/create/ link, got exit $create_exit and stderr: $create_err" >&2
     exit 1
   fi
 
   local campaign_id="$E2E_CAMPAIGN_ID" codes_file=/tmp/cp-e2e/codes.csv
   echo "Campaign: $campaign_id"
 
-  echo "-- campaign codes --"
-  $CLI campaign codes "$campaign_id" --csv "$codes_file" --qr-dir /tmp/cp-e2e/qr --pdf /tmp/cp-e2e/codes.pdf
+  echo "-- codes --"
+  $CLI codes "$campaign_id" --csv "$codes_file" --qr-dir /tmp/cp-e2e/qr --pdf /tmp/cp-e2e/codes.pdf
 
   local first_code first_addr
   first_code="$(sed -n '2p' "$codes_file" | cut -d',' -f1)"
@@ -132,11 +132,11 @@ run_smoke() {
   echo "-- claim --"
   $CLI claim "$first_code" "$first_addr"
 
-  echo "-- campaign status --"
-  $CLI campaign status "$campaign_id"
+  echo "-- status --"
+  $CLI status "$campaign_id"
 
-  echo "-- campaign end --wait --"
-  $CLI campaign end "$campaign_id" --wait
+  echo "-- end --wait --"
+  $CLI end "$campaign_id" --wait
 
   echo "smoke stage: ok"
 }
@@ -151,7 +151,7 @@ run_full() {
 
   # The acceptance below counts codes_claimed in absolute terms, so the campaign must start fresh
   local start_out start_claimed start_total start_status
-  start_out="$($CLI --json campaign status "$campaign_id")"
+  start_out="$($CLI --json status "$campaign_id")"
   start_claimed="$(json_field "$start_out" 'd.campaign.codes_claimed')"
   start_total="$(json_field "$start_out" 'd.campaign.total_codes')"
   start_status="$(json_field "$start_out" 'd.campaign.status')"
@@ -160,9 +160,9 @@ run_full() {
     exit 1
   fi
 
-  echo "-- campaign codes (csv + pdf) --"
+  echo "-- codes (csv + pdf) --"
   local csv_path=/tmp/cp-e2e-full/codes.csv
-  $CLI campaign codes "$campaign_id" --csv "$csv_path" --pdf /tmp/cp-e2e-full/codes.pdf
+  $CLI codes "$campaign_id" --csv "$csv_path" --pdf /tmp/cp-e2e-full/codes.pdf
 
   echo "-- $FULL_CLAIM_COUNT claims, $FULL_CLAIM_INTERVAL seconds apart --"
   local accepted=0
@@ -201,7 +201,7 @@ run_full() {
   local deadline claimed pending queued processing status_out
   deadline=$(( $(date +%s) + FULL_POLL_TIMEOUT ))
   while :; do
-    status_out="$($CLI --json campaign status "$campaign_id")"
+    status_out="$($CLI --json status "$campaign_id")"
     claimed="$(json_field "$status_out" 'd.campaign.codes_claimed')"
     pending="$(json_field "$status_out" 'd.queue.pending')"
     queued="$(json_field "$status_out" 'd.queue.queued')"
@@ -218,8 +218,8 @@ run_full() {
     sleep "$FULL_POLL_INTERVAL"
   done
 
-  echo "-- campaign end --wait --"
-  $CLI campaign end "$campaign_id" --wait
+  echo "-- end --wait --"
+  $CLI end "$campaign_id" --wait
 
   echo "full stage: ok"
 }

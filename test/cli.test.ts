@@ -14,20 +14,22 @@ describe('claimpaign', () => {
   });
   it('lists the commands in help', () => {
     const help = run('--help').stdout;
-    for (const cmd of ['login', 'balance', 'deposit', 'campaign', 'claim']) expect(help).toContain(cmd);
+    for (const cmd of ['login', 'logout', 'balance', 'deposit', 'create', 'list', 'status', 'codes', 'end', 'pause', 'resume', 'claim']) expect(help).toContain(cmd);
+    expect(help).toContain('sandbox (preprod)');
   });
   it('exits 2 on an unknown command or option', () => {
     expect(run('nonsense').status).toBe(2);
     expect(run('--bogus').status).toBe(2);
+    expect(run('campaign', 'list').status).toBe(2); // the campaign group is gone since 0.3.0
   });
-  it('campaign create exits 1 with the web interface link, also with options and arguments from 0.1.x', () => {
+  it('create exits 1 with the web interface link, also with options and arguments', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cp-cli-create-'));
     try {
       for (const args of [
-        ['campaign', 'create'],
-        ['campaign', 'create', '--name', 'test123', '--claims', '2', '--ada', '100'],
-        ['campaign', 'create', 'test123'],
-        ['campaign', 'create', '--token', `${'a'.repeat(56)}.00:1`, '--shared', '--fresh'],
+        ['create'],
+        ['create', '--name', 'test123', '--claims', '2', '--ada', '100'],
+        ['create', 'test123'],
+        ['create', '--token', `${'a'.repeat(56)}.00:1`, '--shared', '--fresh'],
       ]) {
         const r = spawnSync('npx', ['tsx', 'src/bin.ts', '--api', 'http://127.0.0.1:1', ...args], {
           encoding: 'utf8',

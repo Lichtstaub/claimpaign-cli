@@ -16,7 +16,7 @@ export async function balance(opts: { api?: string; json: boolean }): Promise<vo
   }
 
   print(
-    `Sandbox credits: ${formatAda(body.balance.ada)} tADA (locked in campaigns: ${formatAda(body.summary.lockedInCampaigns.ada)}, active campaigns: ${body.summary.activeCampaignCount})`,
+    `Sandbox (preprod) credits: ${formatAda(body.balance.ada)} tADA (locked in campaigns: ${formatAda(body.summary.lockedInCampaigns.ada)}, active campaigns: ${body.summary.activeCampaignCount})`,
     { json: false },
   );
 }

@@ -43,8 +43,8 @@ export function promptSecret(question: string, input: SecretInput = process.stdi
 
 export async function login(opts: { api?: string; token?: string; json: boolean }): Promise<void> {
   const api = resolveApi(opts.api);
-  const token = opts.token ?? await promptSecret('Paste your sandbox API key (from Settings, Sandbox API): ');
-  if (!/^cps_[a-z2-9]{40}$/.test(token)) throw new UsageError('That does not look like a Claimpaign sandbox key (cps_ followed by 40 characters)');
+  const token = opts.token ?? await promptSecret('Paste your sandbox (preprod) API key (from Settings, Sandbox API): ');
+  if (!/^cps_[a-z2-9]{40}$/.test(token)) throw new UsageError('That does not look like a Claimpaign sandbox (preprod) key (cps_ followed by 40 characters)');
   try {
     await apiRequest({ api, token, method: 'GET', path: '/api/org/credits' });
   } catch (err) {
@@ -52,7 +52,7 @@ export async function login(opts: { api?: string; token?: string; json: boolean 
     throw err;
   }
   writeConfig({ token, api });
-  if (!opts.json) process.stdout.write(`Logged in. Key stored in ${configPathHint()} (sandbox only).\n`);
+  if (!opts.json) process.stdout.write(`Logged in. Key stored in ${configPathHint()} (sandbox, preprod only).\n`);
 }
 
 export async function logout(): Promise<void> {
