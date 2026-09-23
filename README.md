@@ -82,7 +82,7 @@ From a checkout: `npm install && npm run build`, then `node dist/bin.js --help`,
 npm test
 ```
 
-`scripts/e2e.sh` runs an end to end test against a real API, not part of `npm test`. It needs `CLAIMPAIGN_API`, `CLAIMPAIGN_TOKEN`, `E2E_ADDRESSES` (a file with one `addr_test` address per line) and `E2E_CAMPAIGN_ID` (an ada campaign with at least one unclaimed code, created in the web interface) as environment variables. The default run is a smoke test, `--full` adds a 60 claim acceptance run and needs `E2E_FULL_CAMPAIGN_ID` (an active campaign with 60 codes and no claims yet), `--foreign` adds a claim against an external CIP-99 faucet and needs `E2E_FOREIGN_URI` (a CIP-99 claim uri, for example the tUSDM preprod faucet).
+`scripts/e2e.sh` runs an end to end test against a real API, not part of `npm test`. It needs `CLAIMPAIGN_API`, `CLAIMPAIGN_TOKEN`, `E2E_ADDRESSES` (a file with one `addr_test` address per line) and `E2E_CAMPAIGN_ID` (an ada campaign with at least one unclaimed code, created in the web interface) as environment variables. The default run is a smoke test, `--full` adds a 60 claim acceptance run and needs `E2E_FULL_CAMPAIGN_ID` (an active campaign with 60 codes and no claims yet), `--foreign` adds a claim against an external CIP-99 faucet and needs `E2E_FOREIGN_URI` (a CIP-99 claim uri, for example the tUSDM preprod faucet). The smoke stage ends `E2E_CAMPAIGN_ID` and `--full` ends `E2E_FULL_CAMPAIGN_ID`, so create fresh campaigns in the web interface before every run.
 
 ## Releasing
 

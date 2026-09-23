@@ -11,13 +11,15 @@
 #                      scripts/derive-test-addresses.ts --from 1 --to 61 in the
 #                      claimpaign.com repo. Line 61 is reserved for the --foreign stage.
 #   E2E_CAMPAIGN_ID   id of an ada campaign with at least one unclaimed code, created in the
-#                      web interface (campaign create only prints the link since 0.2.0)
+#                      web interface (campaign create only prints the link since 0.2.0). The
+#                      smoke stage ends this campaign, create a fresh one before every run.
 #
 # Optional:
 #   CLI               command used to run the CLI, defaults to this checkout's build
 #                      output. Set CLI="npx claimpaign" to test the published package.
 #   E2E_FULL_CAMPAIGN_ID  required only together with --full, an active unique code campaign with
-#                      60 codes and no claims yet, created in the web interface
+#                      60 codes and no claims yet, created in the web interface. The full stage
+#                      ends this campaign too, create a fresh one before every --full run.
 #   E2E_FOREIGN_URI   required only together with --foreign, a CIP-99 claim uri from an
 #                      external faucet, for example the tUSDM preprod faucet:
 #                      web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
@@ -48,13 +50,15 @@ Required environment variables:
                      produced by scripts/derive-test-addresses.ts --from 1 --to 61 in the
                      claimpaign.com repo (line 61 is reserved for the --foreign stage)
   E2E_CAMPAIGN_ID   id of an ada campaign with at least one unclaimed code, created in the
-                     web interface (campaign create only prints the link since 0.2.0)
+                     web interface (campaign create only prints the link since 0.2.0). The
+                     smoke stage ends this campaign, create a fresh one before every run.
 
 Optional:
   CLI               command to run the CLI (default: node dist/bin.js from this checkout,
                      or CLI="npx claimpaign" for the published package)
   E2E_FULL_CAMPAIGN_ID  required only together with --full, an active unique code campaign with
-                     60 codes and no claims yet, created in the web interface
+                     60 codes and no claims yet, created in the web interface. The full stage
+                     ends this campaign too, create a fresh one before every --full run.
   E2E_FOREIGN_URI   required only together with --foreign, a CIP-99 claim uri from an
                      external faucet, for example the tUSDM preprod faucet:
                      web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
