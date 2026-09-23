@@ -44,10 +44,10 @@ export function buildProgram(): Command {
 
   program
     .command('deposit')
-    .description('Show the organization wallet address and how to add credits')
-    .action(async () => {
+    .description('Show how to add sandbox credits')
+    .action(() => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await deposit({ api: opts.api, json: opts.json });
+      deposit({ api: opts.api, json: opts.json });
     });
 
   const campaign = program

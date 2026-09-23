@@ -1,4 +1,4 @@
-/** Shared response shapes for the org credits and org wallet endpoints. */
+/** Shared response shape for the org credits endpoint. */
 
 export interface CreditsBody {
   network: string;
@@ -12,25 +12,6 @@ export interface CreditsBody {
   };
   platformAddress: string;
   transactions: unknown[];
-}
-
-export interface WalletToken {
-  unit: string;
-  policyId: string;
-  assetNameHex: string;
-  assetNameUtf8: string;
-  onChain: string;
-  reserved: string;
-  inFlight: string;
-  available: string;
-  platform: boolean;
-}
-
-export interface WalletBody {
-  network: string;
-  address: string;
-  ada: { lovelace: string; ada: number };
-  tokens: WalletToken[];
 }
 
 /** Shared response shapes for the admin campaign endpoints. */

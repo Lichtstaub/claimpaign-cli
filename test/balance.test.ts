@@ -23,36 +23,6 @@ const CREDITS_BODY = {
   transactions: [],
 };
 
-const WALLET_BODY = {
-  network: 'preprod',
-  address: 'addr_test1qzown0wnwallet',
-  ada: { lovelace: '12000000', ada: 12 },
-  tokens: [
-    {
-      unit: 'platformunittusdm',
-      policyId: 'platformpolicy',
-      assetNameHex: '745553444d',
-      assetNameUtf8: 'tUSDM',
-      onChain: '1000000000',
-      reserved: '0',
-      inFlight: '0',
-      available: '1000000000',
-      platform: true,
-    },
-    {
-      unit: 'ownunithackusd',
-      policyId: 'ownpolicy',
-      assetNameHex: '4841434b555344',
-      assetNameUtf8: 'HACKUSD',
-      onChain: '950',
-      reserved: '0',
-      inFlight: '0',
-      available: '950',
-      platform: false,
-    },
-  ],
-};
-
 let dir: string;
 let api: Awaited<ReturnType<typeof startFakeApi>>;
 let output: string[];
@@ -65,7 +35,6 @@ beforeEach(async () => {
   process.env.CLAIMPAIGN_TOKEN = TOKEN;
   api = await startFakeApi({
     'GET /api/org/credits': authGuarded(TOKEN, CREDITS_BODY),
-    'GET /api/org/wallet': authGuarded(TOKEN, WALLET_BODY),
   });
 });
 
@@ -103,22 +72,26 @@ describe('balance', () => {
 });
 
 describe('deposit', () => {
-  it('prints the wallet address and the credits top up link', async () => {
-    await deposit({ api: api.url, json: false });
+  it('prints the top up link, the faucet and where test tokens come from, without an address', () => {
+    deposit({ api: api.url, json: false });
     const text = output.join('');
-    expect(text).toContain('addr_test1qzown0wnwallet');
     expect(text).toContain(`${api.url}/admin/create/`);
+    expect(text).toContain('https://docs.cardano.org/cardano-testnets/tools/faucet');
+    expect(text).toContain('tUSDM');
+    expect(text).not.toMatch(/addr_test/);
   });
 
-  it('prints the address and network as json', async () => {
-    await deposit({ api: api.url, json: true });
-    expect(JSON.parse(output.join(''))).toEqual({ address: 'addr_test1qzown0wnwallet', network: 'preprod' });
+  it('prints both links as json', () => {
+    deposit({ api: api.url, json: true });
+    expect(JSON.parse(output.join(''))).toEqual({
+      topupUrl: `${api.url}/admin/create/`,
+      faucetUrl: 'https://docs.cardano.org/cardano-testnets/tools/faucet',
+    });
   });
 
-  it('throws Not logged in without a stored token', async () => {
+  it('needs no login and sends no request', () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    const err = await deposit({ api: api.url, json: false }).catch(e => e);
-    expect(err).toBeInstanceOf(UsageError);
-    expect(err.message).toContain('Not logged in');
+    deposit({ api: api.url, json: false });
+    expect(api.calls).toEqual([]);
   });
 });
