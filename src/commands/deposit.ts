@@ -1,27 +1,22 @@
-import { apiRequest, requireToken } from '../api.js';
-import { resolveApi } from '../config.js';
+import { resolveApi, webCreateUrl } from '../config.js';
 import { print } from '../output.js';
-import type { WalletBody } from '../api-types.js';
 
-/** Fetches the org wallet and prints its address together with deposit instructions. */
-export async function deposit(opts: { api?: string; json: boolean }): Promise<void> {
-  const token = requireToken();
+const FAUCET_URL = 'https://docs.cardano.org/cardano-testnets/tools/faucet';
+
+/** Explains how sandbox credits are added. Sends no request and needs no login. */
+export function deposit(opts: { api?: string; json: boolean }): void {
   const api = resolveApi(opts.api);
-
-  const { body: wallet } = await apiRequest<WalletBody>({ api, token, method: 'GET', path: '/api/org/wallet' });
+  const topupUrl = webCreateUrl(api);
 
   if (opts.json) {
-    print({ address: wallet.address, network: wallet.network }, { json: true });
+    print({ topupUrl, faucetUrl: FAUCET_URL }, { json: true });
     return;
   }
 
-  const lines = [
-    `Org wallet: ${wallet.address}`,
-    '',
-    'Send test tokens to this address. They stay the property of the organization and get distributed from there.',
-    'Any tADA sent along with them is used for payouts, it does not become sandbox credits.',
-    `Top up tADA credits in the web interface at ${api}/admin/create/.`,
-    'Preprod ada for the wallet itself comes from the Cardano testnet faucet: https://docs.cardano.org/cardano-testnets/tools/faucet',
-  ];
-  print(lines.join('\n'), { json: false });
+  print([
+    `Add sandbox credits in the web interface: ${topupUrl}`,
+    'Credits are added once the top up transaction is confirmed, usually within a few minutes.',
+    `Test ada for the top up comes from the Cardano testnet faucet: ${FAUCET_URL}`,
+    'Test tokens such as tUSDM come from the platform and are paid with credits when you create a campaign.',
+  ].join('\n'), { json: false });
 }

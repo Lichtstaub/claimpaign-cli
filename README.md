@@ -1,6 +1,6 @@
 # claimpaign
 
-Command line tool for Claimpaign sandbox campaigns and CIP-99 claims. It is made for events like hackathons, workshops and school classes where many people need preprod ada or test tokens quickly: the organizer creates a campaign from the terminal and hands out codes or QR cards, participants claim without owning a wallet yet, and the organization's own test tokens can be distributed the same way. It also claims CIP-99 codes from other faucets on the Cardano preprod testnet.
+Command line tool for Claimpaign sandbox campaigns and CIP-99 claims. It is made for events like hackathons, workshops and school classes where many people need preprod ada or test tokens quickly: the organizer creates a campaign in the web interface, exports its codes or QR cards from the terminal and hands them out, participants claim without owning a wallet yet, and test tokens such as tUSDM can be handed out the same way. It also claims CIP-99 codes from other faucets on the Cardano preprod testnet.
 
 ## Install
 
@@ -23,12 +23,14 @@ Run `claimpaign login` and paste your sandbox API key when prompted. Get a key f
 
 ## Hackathon flow
 
-1. Deposit test tokens into the org wallet, or top up sandbox credits in the web interface. `claimpaign deposit` shows the wallet address and the top up link.
-2. `claimpaign campaign create --name "..." --claims 50 --ada 2` creates a campaign and exports its codes. Run one `campaign create` at a time, two parallel creations would produce two funded campaigns.
-3. `claimpaign campaign codes <id> --qr-dir ./qr --pdf codes.pdf` prints QR codes and a cut sheet PDF.
+1. Top up sandbox credits and create the campaign in the web interface at https://claimpaign.com/admin/create/. `claimpaign deposit` shows the links. Test tokens such as tUSDM are paid with credits when the campaign is created.
+2. `claimpaign campaign list` shows the campaign id.
+3. `claimpaign campaign codes <id> --qr-dir ./qr --pdf codes.pdf` prints QR codes and a cut sheet PDF, `--csv codes.csv` exports the codes.
 4. Hand out the codes, on paper or as QR images.
 5. `claimpaign campaign status <id>` shows how many codes are claimed.
 6. `claimpaign campaign end <id>` ends the campaign and refunds unclaimed credits.
+
+`claimpaign campaign create` no longer creates campaigns, it prints the link to the web interface.
 
 ## For participants
 
@@ -53,9 +55,9 @@ Every command accepts a top level `--json` flag, which prints the shape below in
 
 - `login` no stdout output, only the exit code and the stored config change
 - `logout` no stdout output, only the exit code and the stored config change
-- `balance` `{ credits: <raw org credits body>, wallet: <raw org wallet body> }`
-- `deposit` `{ address, network }`
-- `campaign create` `{ campaign: { id, status, codePrefix, totalCodes }, pricing?, codesFile?, exportError? }`
+- `balance` `{ credits: <raw org credits body> }`
+- `deposit` `{ topupUrl, faucetUrl }`
+- `campaign create` `{ createUrl }`, printed before the command exits with an error
 - `campaign list` `{ campaigns: [...] }`
 - `campaign status` the raw campaign GET body, `{ campaign, codes, queue, pagination }`
 - `campaign codes` without `--csv`/`--qr-dir`/`--pdf`, `{ campaign: { id, name, codePrefix }, codes: [{ code, status, claim_uri, fallback_url }] }`
@@ -80,14 +82,14 @@ From a checkout: `npm install && npm run build`, then `node dist/bin.js --help`,
 npm test
 ```
 
-`scripts/e2e.sh` runs an end to end test against a real API, not part of `npm test`. It needs `CLAIMPAIGN_API`, `CLAIMPAIGN_TOKEN` and `E2E_ADDRESSES` (a file with one `addr_test` address per line) as environment variables. The default run is a smoke test, `--full` adds a 60 claim acceptance run, `--foreign` adds a claim against an external CIP-99 faucet and needs `E2E_FOREIGN_URI` (a CIP-99 claim uri, for example the tUSDM preprod faucet).
+`scripts/e2e.sh` runs an end to end test against a real API, not part of `npm test`. It needs `CLAIMPAIGN_API`, `CLAIMPAIGN_TOKEN`, `E2E_ADDRESSES` (a file with one `addr_test` address per line) and `E2E_CAMPAIGN_ID` (an ada campaign with at least one unclaimed code, created in the web interface) as environment variables. The default run is a smoke test, `--full` adds a 60 claim acceptance run and needs `E2E_FULL_CAMPAIGN_ID` (an active unique code campaign with 60 codes and no claims yet), `--foreign` adds a claim against an external CIP-99 faucet and needs `E2E_FOREIGN_URI` (a CIP-99 claim uri, for example the tUSDM preprod faucet). The smoke stage ends `E2E_CAMPAIGN_ID` and `--full` ends `E2E_FULL_CAMPAIGN_ID`, so create fresh campaigns in the web interface before every run.
 
 ## Releasing
 
 Releases are published to npm by the release workflow, never from a local machine.
 
-1. Bump the version on a branch with `npm version patch --no-git-tag-version` (or `minor`), open a PR and squash merge it.
-2. Tag the merge commit on `main` and push the tag: `git tag -a v0.1.1 -m v0.1.1 && git push origin v0.1.1`.
+1. Bump the version on a branch with `npm version minor --no-git-tag-version` (or `patch`), open a PR and squash merge it.
+2. Tag the merge commit on `main` and push the tag: `git tag -a v0.2.0 -m v0.2.0 && git push origin v0.2.0`.
 3. Approve the staged version on npmjs.com under Staged Packages (asks for 2FA). Only then is it installable.
 
 The workflow checks that the tag matches `package.json` and sits on `main`, runs typecheck, tests and build, stages the version on npm with provenance and creates the GitHub release. If the workflow fails after staging, approve the staged version first and then rerun it, it skips npm when that version already came from the same commit.

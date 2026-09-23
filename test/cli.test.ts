@@ -3,7 +3,6 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fakeKey } from './helpers/fake-api.js';
 
 const run = (...args: string[]) => spawnSync('npx', ['tsx', 'src/bin.ts', ...args], { encoding: 'utf8' });
 
@@ -21,15 +20,22 @@ describe('claimpaign', () => {
     expect(run('nonsense').status).toBe(2);
     expect(run('--bogus').status).toBe(2);
   });
-  it('campaign create with no options and an empty config dir exits 2 with the missing --name/--claims message', () => {
+  it('campaign create exits 1 with the web interface link, also with options and arguments from 0.1.x', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cp-cli-create-'));
     try {
-      const r = spawnSync('npx', ['tsx', 'src/bin.ts', '--api', 'http://127.0.0.1:1', 'campaign', 'create'], {
-        encoding: 'utf8',
-        env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir, CLAIMPAIGN_TOKEN: fakeKey('cli') },
-      });
-      expect(r.status).toBe(2);
-      expect(r.stderr).toContain('--name and --claims are required to create a new campaign');
+      for (const args of [
+        ['campaign', 'create'],
+        ['campaign', 'create', '--name', 'test123', '--claims', '2', '--ada', '100'],
+        ['campaign', 'create', 'test123'],
+        ['campaign', 'create', '--token', `${'a'.repeat(56)}.00:1`, '--shared', '--fresh'],
+      ]) {
+        const r = spawnSync('npx', ['tsx', 'src/bin.ts', '--api', 'http://127.0.0.1:1', ...args], {
+          encoding: 'utf8',
+          env: { ...process.env, CLAIMPAIGN_CONFIG_DIR: dir, CLAIMPAIGN_TOKEN: '' },
+        });
+        expect(r.status, args.join(' ')).toBe(1);
+        expect(r.stderr).toContain('http://127.0.0.1:1/admin/create/');
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

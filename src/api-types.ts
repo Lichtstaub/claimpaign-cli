@@ -1,4 +1,4 @@
-/** Shared response shapes for the org credits and org wallet endpoints. */
+/** Shared response shape for the org credits endpoint. */
 
 export interface CreditsBody {
   network: string;
@@ -14,64 +14,7 @@ export interface CreditsBody {
   transactions: unknown[];
 }
 
-export interface WalletToken {
-  unit: string;
-  policyId: string;
-  assetNameHex: string;
-  assetNameUtf8: string;
-  onChain: string;
-  reserved: string;
-  inFlight: string;
-  available: string;
-  platform: boolean;
-}
-
-export interface WalletBody {
-  network: string;
-  address: string;
-  ada: { lovelace: string; ada: number };
-  tokens: WalletToken[];
-}
-
 /** Shared response shapes for the admin campaign endpoints. */
-
-export interface TokenBundleItem {
-  unit: string;
-  quantity: string;
-}
-
-/** Body sent to POST /api/admin/campaign/create. */
-export interface CampaignCreateRequestBody {
-  name: string;
-  codePrefix: string;
-  codeCount: number;
-  network: 'preprod';
-  adaPerClaim?: number;
-  tokenBundle?: TokenBundleItem[];
-  codeMode?: 'shared';
-  expiresAt?: string;
-  description?: string;
-}
-
-export interface CampaignPricing {
-  serviceFee: number;
-  perCodeCost: number;
-  totalCost: number;
-  tokenValue: number;
-}
-
-/**
- * The create response has several shapes (see api-contract.md variants a to f), the CLI
- * only ever reads campaign.id and campaign.status from it and loads the rest through GET.
- */
-export interface CampaignCreateResponseBody {
-  campaign: { id: string; status: string; [key: string]: unknown };
-  pricing?: CampaignPricing;
-  codes?: string[];
-  pending?: boolean;
-  idempotent?: boolean;
-  message?: string;
-}
 
 export interface CampaignCode {
   code: string;

@@ -23,36 +23,6 @@ const CREDITS_BODY = {
   transactions: [],
 };
 
-const WALLET_BODY = {
-  network: 'preprod',
-  address: 'addr_test1qzown0wnwallet',
-  ada: { lovelace: '12000000', ada: 12 },
-  tokens: [
-    {
-      unit: 'platformunittusdm',
-      policyId: 'platformpolicy',
-      assetNameHex: '745553444d',
-      assetNameUtf8: 'tUSDM',
-      onChain: '1000000000',
-      reserved: '0',
-      inFlight: '0',
-      available: '1000000000',
-      platform: true,
-    },
-    {
-      unit: 'ownunithackusd',
-      policyId: 'ownpolicy',
-      assetNameHex: '4841434b555344',
-      assetNameUtf8: 'HACKUSD',
-      onChain: '950',
-      reserved: '0',
-      inFlight: '0',
-      available: '950',
-      platform: false,
-    },
-  ],
-};
-
 let dir: string;
 let api: Awaited<ReturnType<typeof startFakeApi>>;
 let output: string[];
@@ -65,7 +35,6 @@ beforeEach(async () => {
   process.env.CLAIMPAIGN_TOKEN = TOKEN;
   api = await startFakeApi({
     'GET /api/org/credits': authGuarded(TOKEN, CREDITS_BODY),
-    'GET /api/org/wallet': authGuarded(TOKEN, WALLET_BODY),
   });
 });
 
@@ -79,71 +48,19 @@ afterEach(async () => {
 });
 
 describe('balance', () => {
-  it('prints the credits line, the wallet line and the token table', async () => {
+  it('prints the credits line', async () => {
     await balance({ api: api.url, json: false });
-    const text = output.join('');
-    expect(text).toContain('Sandbox credits: 1,234.50 tADA (locked in campaigns: 200.00, active campaigns: 2)');
-    expect(text).toContain('Org wallet: addr_test1qzown0wnwallet  (12.00 tADA)');
-    expect(text).toContain('Token');
-    expect(text).toContain('Available');
-    expect(text).toContain('Reserved');
-    expect(text).toContain('Settling');
+    expect(output.join('')).toBe('Sandbox credits: 1,234.50 tADA (locked in campaigns: 200.00, active campaigns: 2)\n');
   });
 
-  it('lists the org own token before the platform token, with a platform suffix', async () => {
+  it('never asks for the organization wallet', async () => {
     await balance({ api: api.url, json: false });
-    const text = output.join('');
-    const ownIndex = text.indexOf('HACKUSD');
-    const platformIndex = text.indexOf('tUSDM (platform)');
-    expect(ownIndex).toBeGreaterThan(-1);
-    expect(platformIndex).toBeGreaterThan(-1);
-    expect(ownIndex).toBeLessThan(platformIndex);
+    expect(api.calls.map(c => c.path)).toEqual(['/api/org/credits']);
   });
 
-  it('prints (none) when the wallet holds no tokens', async () => {
-    await api.close();
-    api = await startFakeApi({
-      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
-      'GET /api/org/wallet': () => ({ status: 200, body: { ...WALLET_BODY, tokens: [] } }),
-    });
-    await balance({ api: api.url, json: false });
-    expect(output.join('')).toContain('(none)');
-  });
-
-  it('prints a token amount above 2^53 unchanged, as the raw string', async () => {
-    const hugeAmount = '12345678901234567890';
-    await api.close();
-    api = await startFakeApi({
-      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
-      'GET /api/org/wallet': () => ({
-        status: 200,
-        body: {
-          ...WALLET_BODY,
-          tokens: [{ ...WALLET_BODY.tokens[1], available: hugeAmount }],
-        },
-      }),
-    });
-    await balance({ api: api.url, json: false });
-    expect(output.join('')).toContain(hugeAmount);
-  });
-
-  it('strips control characters from an asset name before printing the table', async () => {
-    await api.close();
-    api = await startFakeApi({
-      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
-      'GET /api/org/wallet': () => ({
-        status: 200,
-        body: { ...WALLET_BODY, tokens: [{ ...WALLET_BODY.tokens[0], assetNameUtf8: '\u0000\u0014\ufffd\u0010tUSDM', platform: false }] },
-      }),
-    });
-    await balance({ api: api.url, json: false });
-    expect(output.join('')).toMatch(/^tUSDM\s/m);
-  });
-
-  it('prints the raw credits and wallet bodies as json', async () => {
+  it('prints the raw credits body as json', async () => {
     await balance({ api: api.url, json: true });
-    const parsed = JSON.parse(output.join(''));
-    expect(parsed).toEqual({ credits: CREDITS_BODY, wallet: WALLET_BODY });
+    expect(JSON.parse(output.join(''))).toEqual({ credits: CREDITS_BODY });
   });
 
   it('throws Not logged in without a stored token', async () => {
@@ -155,22 +72,26 @@ describe('balance', () => {
 });
 
 describe('deposit', () => {
-  it('prints the wallet address and the credits top up link', async () => {
-    await deposit({ api: api.url, json: false });
+  it('prints the top up link, the faucet and where test tokens come from, without an address', () => {
+    deposit({ api: api.url, json: false });
     const text = output.join('');
-    expect(text).toContain('addr_test1qzown0wnwallet');
     expect(text).toContain(`${api.url}/admin/create/`);
+    expect(text).toContain('https://docs.cardano.org/cardano-testnets/tools/faucet');
+    expect(text).toContain('tUSDM');
+    expect(text).not.toMatch(/addr_test/);
   });
 
-  it('prints the address and network as json', async () => {
-    await deposit({ api: api.url, json: true });
-    expect(JSON.parse(output.join(''))).toEqual({ address: 'addr_test1qzown0wnwallet', network: 'preprod' });
+  it('prints both links as json', () => {
+    deposit({ api: api.url, json: true });
+    expect(JSON.parse(output.join(''))).toEqual({
+      topupUrl: `${api.url}/admin/create/`,
+      faucetUrl: 'https://docs.cardano.org/cardano-testnets/tools/faucet',
+    });
   });
 
-  it('throws Not logged in without a stored token', async () => {
+  it('needs no login and sends no request', () => {
     delete process.env.CLAIMPAIGN_TOKEN;
-    const err = await deposit({ api: api.url, json: false }).catch(e => e);
-    expect(err).toBeInstanceOf(UsageError);
-    expect(err.message).toContain('Not logged in');
+    deposit({ api: api.url, json: false });
+    expect(api.calls).toEqual([]);
   });
 });

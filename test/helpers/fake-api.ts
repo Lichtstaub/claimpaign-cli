@@ -21,7 +21,6 @@ export async function startFakeApi(handlers: Record<string, Handler>) {
       const handler = handlers[key] ?? Object.entries(handlers).find(([k]) => key.startsWith(k))?.[1];
       if (!handler) return send(404, { error: `no fake handler for ${key}` });
       const out = await handler(fake);
-      if (out.status === -1) { res.destroy(); return; } // simulate a lost response
       send(out.status, out.body);
     } catch (err) {
       errors.push(err as Error);

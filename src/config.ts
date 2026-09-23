@@ -34,3 +34,8 @@ export function resolveApi(flag?: string): string {
   const raw = flag || process.env.CLAIMPAIGN_API || readConfig().api || DEFAULT_API;
   return raw.replace(/\/+$/, '');
 }
+
+/** Web page where sandbox campaigns are created and credits are topped up. */
+export function webCreateUrl(api: string): string {
+  return `${api}/admin/create/`;
+}

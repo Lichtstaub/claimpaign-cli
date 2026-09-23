@@ -7,7 +7,6 @@ export interface ApiRequestOptions {
   method: string;
   path: string;
   body?: unknown;
-  headers?: Record<string, string>;
   allow?: number[];
   retryDelaysMs?: number[];
   timeoutMs?: number;
@@ -58,9 +57,9 @@ function messageFromBody(body: unknown, status: number): string {
  * with a message naming the timeout instead of the generic unreachable one.
  */
 export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promise<ApiResponse<T>> {
-  const { api, token, method, path, body, headers, allow = [], retryDelaysMs = DEFAULT_RETRY_DELAYS_MS, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+  const { api, token, method, path, body, allow = [], retryDelaysMs = DEFAULT_RETRY_DELAYS_MS, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
   const url = `${api}${path}`;
-  const requestHeaders: Record<string, string> = { ...headers };
+  const requestHeaders: Record<string, string> = {};
   if (token) requestHeaders.authorization = `Bearer ${token}`;
   if (body !== undefined) requestHeaders['content-type'] = 'application/json';
   const canRetry = RETRYABLE_METHODS.has(method.toUpperCase());
