@@ -2,7 +2,7 @@
 # End to end test for the claimpaign CLI, run manually against a real API, not part of
 # npm test. Sandbox (Cardano preprod) only, never mainnet.
 #
-# Requires three environment variables:
+# Requires four environment variables:
 #   CLAIMPAIGN_API    API base URL to test against, a local dev server on preprod or
 #                      https://claimpaign.com
 #   CLAIMPAIGN_TOKEN  sandbox API key of a funded organization, read by the CLI itself,
@@ -10,10 +10,14 @@
 #   E2E_ADDRESSES     path to a file with one addr_test address per line, produced by
 #                      scripts/derive-test-addresses.ts --from 1 --to 61 in the
 #                      claimpaign.com repo. Line 61 is reserved for the --foreign stage.
+#   E2E_CAMPAIGN_ID   id of an ada campaign with at least one unclaimed code, created in the
+#                      web interface (campaign create only prints the link since 0.2.0)
 #
 # Optional:
 #   CLI               command used to run the CLI, defaults to this checkout's build
 #                      output. Set CLI="npx claimpaign" to test the published package.
+#   E2E_FULL_CAMPAIGN_ID  required only together with --full, an active unique code campaign with
+#                      60 codes and no claims yet, created in the web interface
 #   E2E_FOREIGN_URI   required only together with --foreign, a CIP-99 claim uri from an
 #                      external faucet, for example the tUSDM preprod faucet:
 #                      web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
@@ -35,7 +39,7 @@ FULL_POLL_TIMEOUT=1200
 
 usage() {
   cat <<'EOF'
-Usage: CLAIMPAIGN_API=... CLAIMPAIGN_TOKEN=... E2E_ADDRESSES=... scripts/e2e.sh [--full] [--foreign]
+Usage: CLAIMPAIGN_API=... CLAIMPAIGN_TOKEN=... E2E_ADDRESSES=... E2E_CAMPAIGN_ID=... scripts/e2e.sh [--full] [--foreign]
 
 Required environment variables:
   CLAIMPAIGN_API    API base URL to test against (a local dev server on preprod, or https://claimpaign.com)
@@ -43,10 +47,14 @@ Required environment variables:
   E2E_ADDRESSES     path to a file with one addr_test address per line, one per claim,
                      produced by scripts/derive-test-addresses.ts --from 1 --to 61 in the
                      claimpaign.com repo (line 61 is reserved for the --foreign stage)
+  E2E_CAMPAIGN_ID   id of an ada campaign with at least one unclaimed code, created in the
+                     web interface (campaign create only prints the link since 0.2.0)
 
 Optional:
   CLI               command to run the CLI (default: node dist/bin.js from this checkout,
                      or CLI="npx claimpaign" for the published package)
+  E2E_FULL_CAMPAIGN_ID  required only together with --full, an active unique code campaign with
+                     60 codes and no claims yet, created in the web interface
   E2E_FOREIGN_URI   required only together with --foreign, a CIP-99 claim uri from an
                      external faucet, for example the tUSDM preprod faucet:
                      web+cardano://claim/v1?faucet_url=https%3A%2F%2Fbeta.onbd.io%2Fapi%2Fclaim%2Fv1%2F01ksj7qeeg0kbh5s64ds2x9yya&code=01KSJ8PW11CPCG40G7S7TVKXZ9
@@ -65,7 +73,7 @@ for arg in "$@"; do
   esac
 done
 
-for var in CLAIMPAIGN_API CLAIMPAIGN_TOKEN E2E_ADDRESSES; do
+for var in CLAIMPAIGN_API CLAIMPAIGN_TOKEN E2E_ADDRESSES E2E_CAMPAIGN_ID; do
   if [ -z "${!var:-}" ]; then
     usage >&2
     exit 2
@@ -89,16 +97,20 @@ run_smoke() {
   echo "-- balance --"
   $CLI balance
 
-  echo "-- campaign create --"
-  local create_out
-  create_out="$($CLI --json campaign create --name "CLI e2e" --claims 3 --ada 2 --out /tmp/cp-e2e)"
-  local campaign_id codes_file
-  campaign_id="$(json_field "$create_out" 'd.campaign.id')"
-  codes_file="$(json_field "$create_out" 'd.codesFile')"
+  echo "-- deposit --"
+  $CLI deposit
+
+  echo "-- campaign create points to the web interface --"
+  if $CLI campaign create >/dev/null 2>&1; then
+    echo "campaign create should exit with an error since 0.2.0" >&2
+    exit 1
+  fi
+
+  local campaign_id="$E2E_CAMPAIGN_ID" codes_file=/tmp/cp-e2e/codes.csv
   echo "Campaign: $campaign_id"
 
   echo "-- campaign codes --"
-  $CLI campaign codes "$campaign_id" --qr-dir /tmp/cp-e2e/qr --pdf /tmp/cp-e2e/codes.pdf
+  $CLI campaign codes "$campaign_id" --csv "$codes_file" --qr-dir /tmp/cp-e2e/qr --pdf /tmp/cp-e2e/codes.pdf
 
   local first_code first_addr
   first_code="$(sed -n '2p' "$codes_file" | cut -d',' -f1)"
@@ -125,11 +137,19 @@ run_full() {
   rm -rf /tmp/cp-e2e-full
   mkdir -p /tmp/cp-e2e-full
 
-  echo "-- campaign create ($FULL_CLAIM_COUNT codes) --"
-  local create_out campaign_id
-  create_out="$($CLI --json campaign create --name "CLI full e2e" --claims "$FULL_CLAIM_COUNT" --ada 2 --out /tmp/cp-e2e-full)"
-  campaign_id="$(json_field "$create_out" 'd.campaign.id')"
+  local campaign_id="$E2E_FULL_CAMPAIGN_ID"
   echo "Campaign: $campaign_id"
+
+  # The acceptance below counts codes_claimed in absolute terms, so the campaign must start fresh
+  local start_out start_claimed start_total start_status
+  start_out="$($CLI --json campaign status "$campaign_id")"
+  start_claimed="$(json_field "$start_out" 'd.campaign.codes_claimed')"
+  start_total="$(json_field "$start_out" 'd.campaign.total_codes')"
+  start_status="$(json_field "$start_out" 'd.campaign.status')"
+  if [ "$start_status" != "active" ] || [ "$start_claimed" -ne 0 ] || [ "$start_total" -lt "$FULL_CLAIM_COUNT" ]; then
+    echo "E2E_FULL_CAMPAIGN_ID must be an active campaign with $FULL_CLAIM_COUNT codes and no claims yet (status $start_status, claimed $start_claimed, codes $start_total)" >&2
+    exit 1
+  fi
 
   echo "-- campaign codes (csv + pdf) --"
   local csv_path=/tmp/cp-e2e-full/codes.csv
@@ -240,6 +260,11 @@ main() {
         ;;
     esac
   done
+
+  if [ "$full" = true ] && [ -z "${E2E_FULL_CAMPAIGN_ID:-}" ]; then
+    echo "E2E_FULL_CAMPAIGN_ID is required together with --full" >&2
+    exit 2
+  fi
 
   run_smoke
   if [ "$full" = true ]; then run_full; fi
