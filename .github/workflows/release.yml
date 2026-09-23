@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # npm trusted publishing needs npm 11.5.1 or later, which ships with Node 24
+      # Staged publishing needs npm 11.15.0 or later, which ships with Node 24
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
@@ -41,21 +41,22 @@ jobs:
             exit 1
           fi
           npm_version="$(npm --version)"
-          if [ "$(printf '%s\n' 11.5.1 "$npm_version" | sort -V | head -n1)" != 11.5.1 ]; then
-            echo "::error::npm $npm_version is too old for trusted publishing, needs 11.5.1"
+          if [ "$(printf '%s\n' 11.15.0 "$npm_version" | sort -V | head -n1)" != 11.15.0 ]; then
+            echo "::error::npm $npm_version is too old for staged publishing, needs 11.15.0"
             exit 1
           fi
       - run: npm ci
-      # prepublishOnly runs typecheck, tests and build. A version already on npm
-      # from this exact commit means an earlier run published it and failed later,
-      # so the rerun skips straight to the GitHub release.
-      - name: Publish to npm
+      # prepublishOnly runs typecheck, tests and build. The trusted publisher may
+      # only stage, a maintainer approves the version on npmjs.com with 2FA.
+      # A version already on npm from this exact commit means an earlier run
+      # got that far and failed later, so the rerun skips straight to the GitHub release.
+      - name: Stage on npm
         run: |
           name="$(node -p "require('./package.json').name")"
           version="$(node -p "require('./package.json').version")"
           published_head="$(npm view "$name@$version" gitHead 2>/dev/null || true)"
           if [ -z "$published_head" ]; then
-            npm publish --provenance
+            npm stage publish --provenance
           elif [ "$published_head" = "$GITHUB_SHA" ]; then
             echo "$name@$version is already published from $GITHUB_SHA, skipping"
           else

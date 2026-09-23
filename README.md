@@ -88,8 +88,9 @@ Releases are published to npm by the release workflow, never from a local machin
 
 1. Bump the version on a branch with `npm version patch --no-git-tag-version` (or `minor`), open a PR and squash merge it.
 2. Tag the merge commit on `main` and push the tag: `git tag -a v0.1.1 -m v0.1.1 && git push origin v0.1.1`.
+3. Approve the staged version on npmjs.com under Staged Packages (asks for 2FA). Only then is it installable.
 
-The workflow checks that the tag matches `package.json` and sits on `main`, runs typecheck, tests and build, publishes to npm with provenance and creates the GitHub release. If it fails after the npm publish, rerun it, it skips the publish when that version already came from the same commit.
+The workflow checks that the tag matches `package.json` and sits on `main`, runs typecheck, tests and build, stages the version on npm with provenance and creates the GitHub release. If the workflow fails after staging, approve the staged version first and then rerun it, it skips npm when that version already came from the same commit.
 
 ## Documentation
 
