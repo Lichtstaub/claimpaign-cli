@@ -12,7 +12,7 @@ const { version } = createRequire(import.meta.url)('../package.json') as { versi
 
 export function buildProgram(): Command {
   const program = new Command('claimpaign')
-    .description('Claimpaign sandbox campaigns and CIP-99 claims from the terminal')
+    .description('Claimpaign sandbox (preprod) campaigns and CIP-99 testnet claims')
     .version(version)
     .option('--api <url>', 'API base URL (default https://claimpaign.com, or CLAIMPAIGN_API)')
     .option('--json', 'machine readable output', false)
@@ -20,7 +20,7 @@ export function buildProgram(): Command {
 
   program
     .command('login')
-    .description('Store a sandbox API key')
+    .description('Store a sandbox (preprod) API key')
     .action(async () => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await login({ api: opts.api, json: opts.json });
@@ -28,7 +28,7 @@ export function buildProgram(): Command {
 
   program
     .command('logout')
-    .description('Remove the stored sandbox API key')
+    .description('Remove the stored API key')
     .action(async () => {
       await logout();
       if (!program.opts<{ json: boolean }>().json) process.stdout.write('Logged out.\n');
@@ -36,7 +36,7 @@ export function buildProgram(): Command {
 
   program
     .command('balance')
-    .description('Show the sandbox credit balance')
+    .description('Show the sandbox (preprod) credit balance')
     .action(async () => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await balance({ api: opts.api, json: opts.json });
@@ -44,20 +44,16 @@ export function buildProgram(): Command {
 
   program
     .command('deposit')
-    .description('Show how to add sandbox credits')
+    .description('Show how to add sandbox (preprod) credits')
     .action(() => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       deposit({ api: opts.api, json: opts.json });
     });
 
-  const campaign = program
-    .command('campaign')
-    .description('Manage sandbox campaigns');
-
-  campaign
+  program
     .command('create')
-    .description('Moved to the web interface, prints the link')
-    // 0.1.x options and arguments are accepted and ignored, so old scripts get the link instead of a usage error
+    .description('Campaigns are created in the web interface, prints the link')
+    // Any options or arguments are accepted and ignored, a guessed "create --name x" gets the link instead of a usage error
     .allowUnknownOption()
     .allowExcessArguments()
     .action(() => {
@@ -65,23 +61,23 @@ export function buildProgram(): Command {
       campaignCreateMoved({ api: opts.api, json: opts.json });
     });
 
-  campaign
+  program
     .command('list')
-    .description('List sandbox campaigns')
+    .description('List sandbox (preprod) campaigns')
     .action(async () => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await campaignList({ api: opts.api, json: opts.json });
     });
 
-  campaign
+  program
     .command('status <id>')
-    .description('Show a sandbox campaign\'s status, progress and claim queue')
+    .description('Show a campaign\'s status, progress and claim queue')
     .action(async (id: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await campaignStatus(id, { api: opts.api, json: opts.json });
     });
 
-  campaign
+  program
     .command('codes <id>')
     .description('Export a campaign\'s codes as CSV, QR images and/or a print-ready PDF')
     .option('--csv <file>', 'write a CSV file')
@@ -102,26 +98,26 @@ export function buildProgram(): Command {
       });
     });
 
-  campaign
+  program
     .command('end <id>')
-    .description('End a sandbox campaign and refund unclaimed credits')
+    .description('End a campaign and refund unclaimed credits')
     .option('--wait', 'keep retrying while payouts are settling', false)
     .action(async (id: string, cmdOpts: { wait: boolean }) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await campaignEnd(id, { api: opts.api, json: opts.json, wait: cmdOpts.wait });
     });
 
-  campaign
+  program
     .command('pause <id>')
-    .description('Pause a sandbox campaign')
+    .description('Pause a campaign')
     .action(async (id: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await campaignPause(id, { api: opts.api, json: opts.json });
     });
 
-  campaign
+  program
     .command('resume <id>')
-    .description('Resume a paused sandbox campaign')
+    .description('Resume a paused campaign')
     .action(async (id: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
       await campaignResume(id, { api: opts.api, json: opts.json });
@@ -129,7 +125,7 @@ export function buildProgram(): Command {
 
   program
     .command('claim <uri-or-code> <address>')
-    .description('Claim a CIP-99 code on the Cardano preprod testnet')
+    .description('Claim a CIP-99 code to a Cardano testnet address, from any CIP-99 faucet')
     .option('--faucet <url>', 'post a bare code to this faucet url instead of deriving one from --api')
     .action(async (input: string, address: string, cmdOpts: { faucet?: string }) => {
       const opts = program.opts<{ api?: string; json: boolean }>();

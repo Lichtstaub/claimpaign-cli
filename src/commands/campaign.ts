@@ -15,7 +15,7 @@ const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
 export function campaignCreateMoved(opts: { api?: string; json: boolean }): never {
   const createUrl = webCreateUrl(resolveApi(opts.api));
   if (opts.json) print({ createUrl }, { json: true });
-  throw new Error(`Campaigns are created in the web interface at ${createUrl}, export the codes afterwards with "claimpaign campaign codes <id>".`);
+  throw new Error(`Campaigns are created in the web interface at ${createUrl}, export the codes afterwards with "claimpaign codes <id>".`);
 }
 
 /** Lists sandbox campaigns across all pages. */

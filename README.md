@@ -1,6 +1,6 @@
 # claimpaign
 
-Command line tool for Claimpaign sandbox campaigns and CIP-99 claims. It is made for events like hackathons, workshops and school classes where many people need preprod ada or test tokens quickly: the organizer creates a campaign in the web interface, exports its codes or QR cards from the terminal and hands them out, participants claim without owning a wallet yet, and test tokens such as tUSDM can be handed out the same way. It also claims CIP-99 codes from other faucets on the Cardano preprod testnet.
+Command line tool for Claimpaign sandbox (preprod) campaigns and CIP-99 testnet claims. It is made for events like hackathons, workshops and school classes where many people need preprod ada or test tokens quickly: the organizer creates a campaign in the web interface, exports its codes or QR cards from the terminal and hands them out, participants claim without owning a wallet yet, and test tokens such as tUSDM can be handed out the same way. It also claims CIP-99 codes from other faucets to any Cardano testnet address.
 
 ## Install
 
@@ -16,21 +16,21 @@ npm install -g claimpaign
 
 ## Login
 
-Run `claimpaign login` and paste your sandbox API key when prompted. Get a key from Settings, Sandbox API on claimpaign.com, it looks like `cps_` followed by 40 characters. Setting `CLAIMPAIGN_TOKEN` skips `claimpaign login` entirely, every command reads it before anything else. `claimpaign login` itself always prompts for a key even when the variable is set, its whole purpose is storing a key in the config file.
+Run `claimpaign login` and paste your sandbox (preprod) API key when prompted. Get a key from Settings, Sandbox API on claimpaign.com, it looks like `cps_` followed by 40 characters. Setting `CLAIMPAIGN_TOKEN` skips `claimpaign login` entirely, every command reads it before anything else. `claimpaign login` itself always prompts for a key even when the variable is set, its whole purpose is storing a key in the config file.
 
 <img width="800" alt="api-key-settings" src="https://github.com/user-attachments/assets/4c347ed5-eeb6-4fdf-8bf7-3cab5e380b3b" />
 
 
 ## Hackathon flow
 
-1. Top up sandbox credits and create the campaign in the web interface at https://claimpaign.com/admin/create/. `claimpaign deposit` shows the links. Test tokens such as tUSDM are paid with credits when the campaign is created.
-2. `claimpaign campaign list` shows the campaign id.
-3. `claimpaign campaign codes <id> --qr-dir ./qr --pdf codes.pdf` prints QR codes and a cut sheet PDF, `--csv codes.csv` exports the codes.
+1. Top up sandbox (preprod) credits and create the campaign in the web interface at https://claimpaign.com/admin/create/. `claimpaign deposit` shows the links. Test tokens such as tUSDM are paid with credits when the campaign is created.
+2. `claimpaign list` shows the campaign id.
+3. `claimpaign codes <id> --qr-dir ./qr --pdf codes.pdf` prints QR codes and a cut sheet PDF, `--csv codes.csv` exports the codes.
 4. Hand out the codes, on paper or as QR images.
-5. `claimpaign campaign status <id>` shows how many codes are claimed.
-6. `claimpaign campaign end <id>` ends the campaign and refunds unclaimed credits.
+5. `claimpaign status <id>` shows how many codes are claimed.
+6. `claimpaign end <id>` ends the campaign and refunds unclaimed credits.
 
-`claimpaign campaign create` no longer creates campaigns, it prints the link to the web interface.
+`claimpaign create` does not create campaigns, it prints the link to the web interface.
 
 ## For participants
 
@@ -40,7 +40,7 @@ claimpaign claim <uri-or-code> <addr_test...>
 
 Works with a scanned CIP-99 claim URI, or a bare code together with `--faucet <url>`. Also works against other CIP-99 faucets, not just Claimpaign campaigns.
 
-Sandbox (Cardano preprod) only, never mainnet.
+Every command that uses an API key works on the Claimpaign sandbox (preprod) only, the server never lets a key touch mainnet. `claim` needs no key and accepts testnet addresses (`addr_test`) only, so it works with any CIP-99 faucet on preprod or preview.
 
 ## Exit codes
 
@@ -57,13 +57,13 @@ Every command accepts a top level `--json` flag, which prints the shape below in
 - `logout` no stdout output, only the exit code and the stored config change
 - `balance` `{ credits: <raw org credits body> }`
 - `deposit` `{ topupUrl, faucetUrl }`
-- `campaign create` `{ createUrl }`, printed before the command exits with an error
-- `campaign list` `{ campaigns: [...] }`
-- `campaign status` the raw campaign GET body, `{ campaign, codes, queue, pagination }`
-- `campaign codes` without `--csv`/`--qr-dir`/`--pdf`, `{ campaign: { id, name, codePrefix }, codes: [{ code, status, claim_uri, fallback_url }] }`
-- `campaign codes` with `--csv`/`--qr-dir`/`--pdf`, `{ csv?, qrDir?, pdf?, count }`
-- `campaign end` the raw endpoint body, `{ ok, status, refunded? }`
-- `campaign pause` / `campaign resume` the raw endpoint body, `{ ok, status }`
+- `create` `{ createUrl }`, printed before the command exits with an error
+- `list` `{ campaigns: [...] }`
+- `status` the raw campaign GET body, `{ campaign, codes, queue, pagination }`
+- `codes` without `--csv`/`--qr-dir`/`--pdf`, `{ campaign: { id, name, codePrefix }, codes: [{ code, status, claim_uri, fallback_url }] }`
+- `codes` with `--csv`/`--qr-dir`/`--pdf`, `{ csv?, qrDir?, pdf?, count }`
+- `end` the raw endpoint body, `{ ok, status, refunded? }`
+- `pause` / `resume` the raw endpoint body, `{ ok, status }`
 - `claim` the raw faucet response body, `{ code, status, message?, lovelaces?, tokens?, queue_position? }`, printed even when the claim is not accepted, before the command exits with an error
 
 ## Configuration
@@ -71,7 +71,7 @@ Every command accepts a top level `--json` flag, which prints the shape below in
 The CLI stores its login in `~/.config/claimpaign/config.json` (mode 0600).
 
 - `CLAIMPAIGN_API` API base URL, overrides the stored one and the default `https://claimpaign.com`
-- `CLAIMPAIGN_TOKEN` sandbox API key, overrides the stored one and skips the login prompt
+- `CLAIMPAIGN_TOKEN` sandbox (preprod) API key, overrides the stored one and skips the login prompt
 - `CLAIMPAIGN_CONFIG_DIR` directory for `config.json`, default `~/.config/claimpaign`
 
 ## Development
@@ -89,7 +89,7 @@ npm test
 Releases are published to npm by the release workflow, never from a local machine.
 
 1. Bump the version on a branch with `npm version minor --no-git-tag-version` (or `patch`), open a PR and squash merge it.
-2. Tag the merge commit on `main` and push the tag: `git tag -a v0.2.0 -m v0.2.0 && git push origin v0.2.0`.
+2. Tag the merge commit on `main` and push the tag: `git tag -a v0.3.0 -m v0.3.0 && git push origin v0.3.0`.
 3. Approve the staged version on npmjs.com under Staged Packages (asks for 2FA). Only then is it installable.
 
 The workflow checks that the tag matches `package.json` and sits on `main`, runs typecheck, tests and build, stages the version on npm with provenance and creates the GitHub release. If the workflow fails after staging, approve the staged version first and then rerun it, it skips npm when that version already came from the same commit.

@@ -50,7 +50,7 @@ afterEach(async () => {
 describe('balance', () => {
   it('prints the credits line', async () => {
     await balance({ api: api.url, json: false });
-    expect(output.join('')).toBe('Sandbox credits: 1,234.50 tADA (locked in campaigns: 200.00, active campaigns: 2)\n');
+    expect(output.join('')).toBe('Sandbox (preprod) credits: 1,234.50 tADA (locked in campaigns: 200.00, active campaigns: 2)\n');
   });
 
   it('never asks for the organization wallet', async () => {

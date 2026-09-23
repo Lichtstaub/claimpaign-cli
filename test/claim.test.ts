@@ -102,7 +102,7 @@ describe('claim', () => {
   it('rejects a mainnet address with the exact message', async () => {
     api = await startFakeApi({});
     await expect(claim('hack_7k3mq9xz4h', MAINNET_ADDRESS, { api: api.url, json: false }))
-      .rejects.toThrow('This tool claims on the Cardano preprod testnet only, mainnet addresses (addr1...) are not accepted.');
+      .rejects.toThrow('This tool claims to Cardano testnet addresses (addr_test...) only, mainnet addresses (addr1...) are not accepted.');
   });
 
   it('rejects an invalid CIP-99 uri', async () => {
