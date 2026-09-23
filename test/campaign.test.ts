@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeApi, fakeKey } from './helpers/fake-api.js';
@@ -36,57 +36,23 @@ afterEach(async () => {
   delete process.env.CLAIMPAIGN_TOKEN;
 });
 
-function pendingFile(): string {
-  return join(dir, 'pending-create.json');
-}
-
 describe('campaign create', () => {
   it('points to the web interface, sends no request and fails', async () => {
     fake = await startFakeApi({});
     expect(() => campaignCreateMoved({ api: fake!.url, json: false })).toThrow(`${fake!.url}/admin/create/`);
     expect(fake!.calls).toEqual([]);
+    expect(output.join('')).toBe('');
     expect(errOutput.join('')).toBe('');
-    expect(existsSync(pendingFile())).toBe(false);
   });
 
-  it('reports a pending creation left by an earlier version and keeps the file unchanged', () => {
-    const pendingContent = JSON.stringify({
-      key: 'k-1', api: 'https://claimpaign.com', tokenHash: 'abcdef012345', createdAt: '2026-09-20T10:00:00.000Z',
-      body: { name: 'Hack Day', codePrefix: 'HACKDAYAB', codeCount: 50, network: 'preprod' },
-    });
-    writeFileSync(pendingFile(), pendingContent);
-    expect(() => campaignCreateMoved({ api: 'https://claimpaign.com', json: false })).toThrow('web interface');
-    const err = errOutput.join('');
-    expect(err).toContain('"Hack Day"');
-    expect(err).toContain('HACKDAYAB');
-    expect(err).toContain('50 codes');
-    expect(err).toContain('claimpaign campaign list');
-    expect(readFileSync(pendingFile(), 'utf8')).toBe(pendingContent);
-  });
-
-  it('prints the link and the pending creation as json before failing', () => {
-    writeFileSync(pendingFile(), JSON.stringify({
-      key: 'k-1', api: 'https://claimpaign.com', createdAt: '2026-09-20T10:00:00.000Z',
-      body: { name: 'Hack Day', codePrefix: 'HACKDAYAB', codeCount: 50 },
-    }));
+  it('prints the link as json before failing', () => {
     expect(() => campaignCreateMoved({ api: 'https://claimpaign.com', json: true })).toThrow('web interface');
-    expect(JSON.parse(output.join(''))).toEqual({
-      createUrl: 'https://claimpaign.com/admin/create/',
-      pendingCreate: { api: 'https://claimpaign.com', name: 'Hack Day', codePrefix: 'HACKDAYAB', codeCount: 50, createdAt: '2026-09-20T10:00:00.000Z' },
-    });
-    expect(errOutput.join('')).toContain('claimpaign campaign list');
-  });
-
-  it('treats a truncated pending file as no pending creation', () => {
-    writeFileSync(pendingFile(), '{"key":');
-    expect(() => campaignCreateMoved({ api: 'https://claimpaign.com', json: true })).toThrow('web interface');
-    expect(JSON.parse(output.join('')).pendingCreate).toBeNull();
+    expect(JSON.parse(output.join(''))).toEqual({ createUrl: 'https://claimpaign.com/admin/create/' });
   });
 
   it('needs no login', () => {
     delete process.env.CLAIMPAIGN_TOKEN;
     expect(() => campaignCreateMoved({ api: 'https://claimpaign.com', json: false })).toThrow('web interface');
-    expect(existsSync(pendingFile())).toBe(false);
   });
 });
 

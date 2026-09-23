@@ -57,7 +57,7 @@ Every command accepts a top level `--json` flag, which prints the shape below in
 - `logout` no stdout output, only the exit code and the stored config change
 - `balance` `{ credits: <raw org credits body> }`
 - `deposit` `{ topupUrl, faucetUrl }`
-- `campaign create` `{ createUrl, pendingCreate }`, printed before the command exits with an error. `pendingCreate` is `null` or `{ api, name, codePrefix, codeCount, createdAt }` of a creation an earlier version left unfinished
+- `campaign create` `{ createUrl }`, printed before the command exits with an error
 - `campaign list` `{ campaigns: [...] }`
 - `campaign status` the raw campaign GET body, `{ campaign, codes, queue, pagination }`
 - `campaign codes` without `--csv`/`--qr-dir`/`--pdf`, `{ campaign: { id, name, codePrefix }, codes: [{ code, status, claim_uri, fallback_url }] }`

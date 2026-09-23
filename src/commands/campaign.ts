@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { apiRequest, ApiError, requireToken, sleep } from '../api.js';
-import { configDir, resolveApi, webCreateUrl } from '../config.js';
+import { resolveApi, webCreateUrl } from '../config.js';
 import { print, table } from '../output.js';
 import { MAX_PAGES } from './campaign-codes.js';
 import type { CampaignGetResponseBody, CampaignListItem, CampaignListResponseBody } from '../api-types.js';
@@ -9,73 +7,14 @@ import type { CampaignGetResponseBody, CampaignListItem, CampaignListResponseBod
 const DEFAULT_END_WAIT_MS = 20_000;
 const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
 
-/** Shape of the pending-create.json that claimpaign 0.1.x wrote, read loosely and only to report it. */
-interface LegacyPendingCreate {
-  api?: unknown;
-  createdAt?: unknown;
-  body?: { name?: unknown; codePrefix?: unknown; codeCount?: unknown };
-}
-
-interface CampaignCreateMovedResult {
-  createUrl: string;
-  pendingCreate: { api: string | null; name: string | null; codePrefix: string | null; codeCount: number | null; createdAt: string | null } | null;
-}
-
-function pendingPath(): string {
-  return join(configDir(), 'pending-create.json');
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
-/** Reads a creation attempt left by 0.1.x. Unreadable or truncated files count as none. The file is never changed. */
-function readLegacyPendingCreate(): CampaignCreateMovedResult['pendingCreate'] {
-  try {
-    const parsed = JSON.parse(readFileSync(pendingPath(), 'utf8')) as LegacyPendingCreate;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const body = parsed.body && typeof parsed.body === 'object' ? parsed.body : {};
-    return {
-      api: stringOrNull(parsed.api),
-      name: stringOrNull(body.name),
-      codePrefix: stringOrNull(body.codePrefix),
-      codeCount: typeof body.codeCount === 'number' ? body.codeCount : null,
-      createdAt: stringOrNull(parsed.createdAt),
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Campaigns are created in the web interface since 0.2.0. This explains that, reports a
- * creation an older version may have left pending, and fails with exit 1. It sends no
- * request and needs no login, so it behaves the same against every server version.
+ * Campaigns are created in the web interface since 0.2.0. This points there and fails with
+ * exit 1. It sends no request and needs no login, so it behaves the same against every
+ * server version.
  */
 export function campaignCreateMoved(opts: { api?: string; json: boolean }): never {
-  const api = resolveApi(opts.api);
-  const createUrl = webCreateUrl(api);
-  const pendingCreate = readLegacyPendingCreate();
-
-  if (opts.json) {
-    const result: CampaignCreateMovedResult = { createUrl, pendingCreate };
-    print(result, { json: true });
-  }
-  // The pending note goes to stderr in both modes, stdout stays pure JSON with --json
-  if (pendingCreate) {
-    const what = [
-      pendingCreate.name ? `"${pendingCreate.name}"` : 'a campaign',
-      pendingCreate.codePrefix ? `prefix ${pendingCreate.codePrefix}` : null,
-      pendingCreate.codeCount !== null ? `${pendingCreate.codeCount} codes` : null,
-    ].filter(Boolean).join(', ');
-    const when = pendingCreate.createdAt ? ` on ${pendingCreate.createdAt}` : '';
-    const where = pendingCreate.api ? ` against ${pendingCreate.api}` : '';
-    process.stderr.write(
-      `An earlier claimpaign version started creating ${what}${when}${where}. It may exist already, ` +
-      `run "claimpaign campaign list" before creating it again. Delete ${pendingPath()} once you have checked.\n`,
-    );
-  }
-
+  const createUrl = webCreateUrl(resolveApi(opts.api));
+  if (opts.json) print({ createUrl }, { json: true });
   throw new Error(`Campaigns are created in the web interface at ${createUrl}, export the codes afterwards with "claimpaign campaign codes <id>".`);
 }
 
