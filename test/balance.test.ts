@@ -79,71 +79,19 @@ afterEach(async () => {
 });
 
 describe('balance', () => {
-  it('prints the credits line, the wallet line and the token table', async () => {
+  it('prints the credits line', async () => {
     await balance({ api: api.url, json: false });
-    const text = output.join('');
-    expect(text).toContain('Sandbox credits: 1,234.50 tADA (locked in campaigns: 200.00, active campaigns: 2)');
-    expect(text).toContain('Org wallet: addr_test1qzown0wnwallet  (12.00 tADA)');
-    expect(text).toContain('Token');
-    expect(text).toContain('Available');
-    expect(text).toContain('Reserved');
-    expect(text).toContain('Settling');
+    expect(output.join('')).toBe('Sandbox credits: 1,234.50 tADA (locked in campaigns: 200.00, active campaigns: 2)\n');
   });
 
-  it('lists the org own token before the platform token, with a platform suffix', async () => {
+  it('never asks for the organization wallet', async () => {
     await balance({ api: api.url, json: false });
-    const text = output.join('');
-    const ownIndex = text.indexOf('HACKUSD');
-    const platformIndex = text.indexOf('tUSDM (platform)');
-    expect(ownIndex).toBeGreaterThan(-1);
-    expect(platformIndex).toBeGreaterThan(-1);
-    expect(ownIndex).toBeLessThan(platformIndex);
+    expect(api.calls.map(c => c.path)).toEqual(['/api/org/credits']);
   });
 
-  it('prints (none) when the wallet holds no tokens', async () => {
-    await api.close();
-    api = await startFakeApi({
-      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
-      'GET /api/org/wallet': () => ({ status: 200, body: { ...WALLET_BODY, tokens: [] } }),
-    });
-    await balance({ api: api.url, json: false });
-    expect(output.join('')).toContain('(none)');
-  });
-
-  it('prints a token amount above 2^53 unchanged, as the raw string', async () => {
-    const hugeAmount = '12345678901234567890';
-    await api.close();
-    api = await startFakeApi({
-      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
-      'GET /api/org/wallet': () => ({
-        status: 200,
-        body: {
-          ...WALLET_BODY,
-          tokens: [{ ...WALLET_BODY.tokens[1], available: hugeAmount }],
-        },
-      }),
-    });
-    await balance({ api: api.url, json: false });
-    expect(output.join('')).toContain(hugeAmount);
-  });
-
-  it('strips control characters from an asset name before printing the table', async () => {
-    await api.close();
-    api = await startFakeApi({
-      'GET /api/org/credits': () => ({ status: 200, body: CREDITS_BODY }),
-      'GET /api/org/wallet': () => ({
-        status: 200,
-        body: { ...WALLET_BODY, tokens: [{ ...WALLET_BODY.tokens[0], assetNameUtf8: '\u0000\u0014\ufffd\u0010tUSDM', platform: false }] },
-      }),
-    });
-    await balance({ api: api.url, json: false });
-    expect(output.join('')).toMatch(/^tUSDM\s/m);
-  });
-
-  it('prints the raw credits and wallet bodies as json', async () => {
+  it('prints the raw credits body as json', async () => {
     await balance({ api: api.url, json: true });
-    const parsed = JSON.parse(output.join(''));
-    expect(parsed).toEqual({ credits: CREDITS_BODY, wallet: WALLET_BODY });
+    expect(JSON.parse(output.join(''))).toEqual({ credits: CREDITS_BODY });
   });
 
   it('throws Not logged in without a stored token', async () => {
