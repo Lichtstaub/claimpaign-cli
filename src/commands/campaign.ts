@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { apiRequest, ApiError, requireToken, sleep } from '../api.js';
-import { configDir, resolveApi } from '../config.js';
+import { configDir, resolveApi, webCreateUrl } from '../config.js';
 import { print, table } from '../output.js';
 import { MAX_PAGES } from './campaign-codes.js';
 import type { CampaignGetResponseBody, CampaignListItem, CampaignListResponseBody } from '../api-types.js';
@@ -16,7 +16,7 @@ interface LegacyPendingCreate {
   body?: { name?: unknown; codePrefix?: unknown; codeCount?: unknown };
 }
 
-export interface CampaignCreateMovedResult {
+interface CampaignCreateMovedResult {
   createUrl: string;
   pendingCreate: { api: string | null; name: string | null; codePrefix: string | null; codeCount: number | null; createdAt: string | null } | null;
 }
@@ -54,7 +54,7 @@ function readLegacyPendingCreate(): CampaignCreateMovedResult['pendingCreate'] {
  */
 export function campaignCreateMoved(opts: { api?: string; json: boolean }): never {
   const api = resolveApi(opts.api);
-  const createUrl = `${api}/admin/create/`;
+  const createUrl = webCreateUrl(api);
   const pendingCreate = readLegacyPendingCreate();
 
   if (opts.json) {
@@ -77,10 +77,6 @@ export function campaignCreateMoved(opts: { api?: string; json: boolean }): neve
   }
 
   throw new Error(`Campaigns are created in the web interface at ${createUrl}, export the codes afterwards with "claimpaign campaign codes <id>".`);
-}
-
-function formatLovelace(lovelace: number): string {
-  return (lovelace / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** Lists sandbox campaigns across all pages. */
@@ -149,6 +145,10 @@ function errorText(body: unknown): string {
     return (body as { error: string }).error;
   }
   return '';
+}
+
+function formatLovelace(lovelace: number): string {
+  return (lovelace / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export interface CampaignEndOpts {

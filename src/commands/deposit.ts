@@ -1,4 +1,4 @@
-import { resolveApi } from '../config.js';
+import { resolveApi, webCreateUrl } from '../config.js';
 import { print } from '../output.js';
 
 const FAUCET_URL = 'https://docs.cardano.org/cardano-testnets/tools/faucet';
@@ -6,7 +6,7 @@ const FAUCET_URL = 'https://docs.cardano.org/cardano-testnets/tools/faucet';
 /** Explains how sandbox credits are added. Sends no request and needs no login. */
 export function deposit(opts: { api?: string; json: boolean }): void {
   const api = resolveApi(opts.api);
-  const topupUrl = `${api}/admin/create/`;
+  const topupUrl = webCreateUrl(api);
 
   if (opts.json) {
     print({ topupUrl, faucetUrl: FAUCET_URL }, { json: true });
