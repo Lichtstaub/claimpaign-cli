@@ -6,6 +6,8 @@ import { startFakeApi, fakeKey } from './helpers/fake-api.js';
 import { campaignCreateMoved, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from '../src/commands/campaign.js';
 import { UsageError } from '../src/output.js';
 import { ApiError } from '../src/api.js';
+import { resolveCampaignId } from '../src/campaigns.js';
+import { run } from '../src/cli.js';
 
 const TOKEN = fakeKey('campaign');
 
@@ -36,6 +38,11 @@ afterEach(async () => {
   delete process.env.CLAIMPAIGN_TOKEN;
 });
 
+const row = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id, name: id, status, total_codes: 10, codes_claimed: 0, code_prefix: 'P', code_mode: 'unique', network: 'preprod', created_at: '2026-01-01',
+  ada_per_claim: 10_000_000, campaign_type: 'ada', token_bundle: null, has_tokens: 0, has_nft: 0, ...extra,
+});
+
 describe('campaign create', () => {
   it('points to the web interface, sends no request and fails', async () => {
     fake = await startFakeApi({});
@@ -57,11 +64,6 @@ describe('campaign create', () => {
 });
 
 describe('campaign list', () => {
-  const row = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
-    id, name: id, status, total_codes: 10, codes_claimed: 0, code_prefix: 'P', code_mode: 'unique', network: 'preprod', created_at: '2026-01-01',
-    ada_per_claim: 10_000_000, campaign_type: 'ada', token_bundle: null, has_tokens: 0, has_nft: 0, ...extra,
-  });
-
   const listFake = (campaigns: unknown[], tokenMeta: unknown = null) => startFakeApi({
     'GET /api/admin/campaigns': () => ({ status: 200, body: { campaigns, total: campaigns.length, page: 1, limit: 100, pages: 1, tokenMeta } }),
   });
@@ -335,5 +337,89 @@ describe('campaign pause and resume', () => {
     const resumeErr = await campaignResume('camp-x', { api: 'http://127.0.0.1:1', json: false }).catch(e => e);
     expect(resumeErr).toBeInstanceOf(UsageError);
     expect(resumeErr.message).toContain('Not logged in');
+  });
+});
+
+describe('campaign references', () => {
+  const CAMPAIGNS = [
+    row('xeq4nq7d', 'active', { name: 'Hackathon Test', code_prefix: 'BORA' }),
+    row('xeq9abcd', 'ended', { name: 'Old Workshop', code_prefix: 'WORK' }),
+    row('bora2345', 'ended', { name: 'Id starts like a prefix', code_prefix: 'ZED' }),
+    row('hk7m3p2q', 'active', { name: 'Prefix shaped like an id', code_prefix: 'HACKATHN' }),
+  ];
+  const known = (path: string) => CAMPAIGNS.find(c => path.endsWith(`/${c.id}`));
+
+  const referenceFake = () => startFakeApi({
+    'GET /api/admin/campaigns': () => ({ status: 200, body: { campaigns: CAMPAIGNS, total: CAMPAIGNS.length, page: 1, limit: 100, pages: 1 } }),
+    'GET /api/admin/campaign/': req => {
+      const campaign = known(req.path);
+      if (!campaign) return { status: 404, body: { error: 'Campaign not found' } };
+      return { status: 200, body: { campaign, codes: [], queue: { pending: 0, queued: 0, processing: 0 }, pagination: { total: 0, page: 1, limit: 200, pages: 1 } } };
+    },
+    'PATCH /api/admin/campaign/': req => known(req.path)
+      ? { status: 200, body: { ok: true, status: req.body.status, refunded: 0 } }
+      : { status: 404, body: { error: 'Campaign not found' } },
+  });
+
+  const cli = (...args: string[]) => run(['node', 'claimpaign', '--api', fake!.url, ...args]);
+  const campaignCalls = () => fake!.calls.filter(c => c.path.startsWith('/api/admin/campaign/')).map(c => `${c.method} ${c.path}`);
+  const listCalls = () => fake!.calls.filter(c => c.path === '/api/admin/campaigns').length;
+
+  beforeEach(async () => { fake = await referenceFake(); });
+
+  it('resolves an exact id without a notice', async () => {
+    expect(await resolveCampaignId('xeq4nq7d', fake!.url)).toBe('xeq4nq7d');
+    expect(errOutput.join('')).toBe('');
+  });
+
+  it('resolves the code prefix in any case and says which campaign it picked', async () => {
+    expect(await resolveCampaignId('bora', fake!.url)).toBe('xeq4nq7d');
+    expect(errOutput.join('')).toBe('Using campaign xeq4nq7d, Hackathon Test (BORA)\n');
+  });
+
+  it('resolves a unique start of the id, ended campaigns included', async () => {
+    expect(await resolveCampaignId('xeq9', fake!.url)).toBe('xeq9abcd');
+    expect(errOutput.join('')).toContain('Using campaign xeq9abcd, Old Workshop (WORK)');
+  });
+
+  it('rejects a start of the id that fits several campaigns and names them', async () => {
+    const err = await resolveCampaignId('xeq', fake!.url).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toContain('xeq4nq7d');
+    expect(err.message).toContain('xeq9abcd');
+  });
+
+  it('needs at least three characters for a start of the id', async () => {
+    const err = await resolveCampaignId('bo', fake!.url).catch(e => e);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.message).toBe('No campaign with the id or code prefix "bo", "claimpaign list --all" shows both');
+  });
+
+  it.each([
+    ['status', 'GET'],
+    ['codes', 'GET'],
+    ['end', 'PATCH'],
+    ['pause', 'PATCH'],
+    ['resume', 'PATCH'],
+  ])('%s accepts the code prefix', async (command, method) => {
+    expect(await cli(command, 'bora')).toBe(0);
+    expect(campaignCalls()).toContain(`${method} /api/admin/campaign/xeq4nq7d`);
+  });
+
+  it('sends an exact id straight to the command without loading the list', async () => {
+    expect(await cli('status', 'xeq4nq7d')).toBe(0);
+    expect(listCalls()).toBe(0);
+    expect(campaignCalls()).toEqual(['GET /api/admin/campaign/xeq4nq7d']);
+  });
+
+  it('falls back to the list when an id shaped reference is a lowercase code prefix', async () => {
+    expect(await cli('end', 'hackathn')).toBe(0);
+    expect(campaignCalls()).toEqual(['PATCH /api/admin/campaign/hackathn', 'PATCH /api/admin/campaign/hk7m3p2q']);
+    expect(errOutput.join('')).toContain('Using campaign hk7m3p2q');
+  });
+
+  it('exits 2 when nothing matches', async () => {
+    expect(await cli('status', 'zzzzzzzz')).toBe(2);
+    expect(errOutput.join('')).toContain('No campaign with the id or code prefix "zzzzzzzz"');
   });
 });

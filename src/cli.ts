@@ -7,6 +7,7 @@ import { deposit } from './commands/deposit.js';
 import { campaignCreateMoved, campaignList, campaignStatus, campaignEnd, campaignPause, campaignResume } from './commands/campaign.js';
 import { campaignCodes } from './commands/campaign-codes.js';
 import { claim } from './commands/claim.js';
+import { withCampaign } from './campaigns.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -71,24 +72,24 @@ export function buildProgram(): Command {
     });
 
   program
-    .command('status <id>')
+    .command('status <campaign>')
     .description('Show a campaign\'s status, progress and claim queue')
-    .action(async (id: string) => {
+    .action(async (ref: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignStatus(id, { api: opts.api, json: opts.json });
+      await withCampaign(ref, opts.api, id => campaignStatus(id, { api: opts.api, json: opts.json }));
     });
 
   program
-    .command('codes <id>')
+    .command('codes <campaign>')
     .description('Export a campaign\'s codes as CSV, QR images and/or a print-ready PDF')
     .option('--csv <file>', 'write a CSV file')
     .option('--qr-dir <dir>', 'write one QR PNG per code into this directory')
     .option('--pdf <file>', 'write a print-ready PDF with one card per code')
     .option('--fallback', 'use the HTTPS fallback URL instead of the wallet deep link for QR and PDF', false)
     .option('--all', 'include already claimed codes', false)
-    .action(async (id: string, cmdOpts: { csv?: string; qrDir?: string; pdf?: string; fallback: boolean; all: boolean }) => {
+    .action(async (ref: string, cmdOpts: { csv?: string; qrDir?: string; pdf?: string; fallback: boolean; all: boolean }) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignCodes(id, {
+      await withCampaign(ref, opts.api, id => campaignCodes(id, {
         api: opts.api,
         json: opts.json,
         csv: cmdOpts.csv,
@@ -96,32 +97,32 @@ export function buildProgram(): Command {
         pdf: cmdOpts.pdf,
         fallback: cmdOpts.fallback,
         all: cmdOpts.all,
-      });
+      }));
     });
 
   program
-    .command('end <id>')
+    .command('end <campaign>')
     .description('End a campaign and refund unclaimed credits')
     .option('--wait', 'keep retrying while payouts are settling', false)
-    .action(async (id: string, cmdOpts: { wait: boolean }) => {
+    .action(async (ref: string, cmdOpts: { wait: boolean }) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignEnd(id, { api: opts.api, json: opts.json, wait: cmdOpts.wait });
+      await withCampaign(ref, opts.api, id => campaignEnd(id, { api: opts.api, json: opts.json, wait: cmdOpts.wait }));
     });
 
   program
-    .command('pause <id>')
+    .command('pause <campaign>')
     .description('Pause a campaign')
-    .action(async (id: string) => {
+    .action(async (ref: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignPause(id, { api: opts.api, json: opts.json });
+      await withCampaign(ref, opts.api, id => campaignPause(id, { api: opts.api, json: opts.json }));
     });
 
   program
-    .command('resume <id>')
+    .command('resume <campaign>')
     .description('Resume a paused campaign')
-    .action(async (id: string) => {
+    .action(async (ref: string) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignResume(id, { api: opts.api, json: opts.json });
+      await withCampaign(ref, opts.api, id => campaignResume(id, { api: opts.api, json: opts.json }));
     });
 
   program
