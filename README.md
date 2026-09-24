@@ -53,15 +53,15 @@ API keys only work in the Claimpaign sandbox (Cardano preprod). The server never
 ### Run an event
 
 1. Top up sandbox credits and create the campaign in the web interface at https://claimpaign.com/admin/create/. `claimpaign deposit` shows the links. Test tokens such as tUSDM are paid with credits when the campaign is created.
-2. Find the campaign id with `claimpaign list`.
-3. Export the codes as a print-ready PDF with one card per code: `claimpaign codes <id> --pdf codes.pdf`. `--qr-dir ./qr` writes one QR image per code, `--csv codes.csv` a CSV file.
+2. `claimpaign list` shows the campaign with its code prefix, for example `BORA`.
+3. Export the codes as a print-ready PDF with one card per code: `claimpaign codes BORA --pdf codes.pdf`. `--qr-dir ./qr` writes one QR image per code, `--csv codes.csv` a CSV file.
 4. Hand out the codes, on paper or as QR images.
-5. Check how many codes are claimed while the event runs: `claimpaign status <id>`.
-6. End the campaign afterwards to get the credits of unclaimed codes back: `claimpaign end <id>`.
+5. Check how many codes are claimed while the event runs: `claimpaign status BORA`.
+6. End the campaign afterwards to get the credits of unclaimed codes back: `claimpaign end BORA`.
 
 ## Commands
 
-`claimpaign --help` lists all commands, `claimpaign <command> --help` shows the options of one command. Every command accepts `--api <url>` and `--json`.
+`claimpaign --help` lists all commands, `claimpaign <command> --help` shows the options of one command. Every command accepts `--api <url>` and `--json`. Where a command takes `<campaign>`, pass the campaign id, the code prefix in any case (`BORA`, `bora`) or the first three or more characters of the id, as long as no other campaign starts the same way.
 
 For participants, no API key needed:
 
@@ -74,10 +74,10 @@ For organizers, all with an API key except `deposit` and `create`:
 - `deposit` shows how to add sandbox credits
 - `create` prints the link to the web interface, campaigns are created there
 - `list` lists your running sandbox campaigns and what one claim pays. `--all` includes ended campaigns
-- `status <id>` shows a campaign's status, progress and claim queue
-- `codes <id>` prints the unclaimed codes of a campaign, or exports them with `--pdf <file>` (print-ready cards), `--qr-dir <dir>` (one QR PNG per code) and `--csv <file>`. `--all` includes already claimed codes, `--fallback` puts the HTTPS fallback URL into QR images and cards instead of the wallet deep link
-- `end <id>` ends a campaign and refunds unclaimed credits. `--wait` keeps retrying while payouts are settling
-- `pause <id>` and `resume <id>` pause and resume a campaign
+- `status <campaign>` shows a campaign's status, progress and claim queue
+- `codes <campaign>` prints the unclaimed codes of a campaign, or exports them with `--pdf <file>` (print-ready cards), `--qr-dir <dir>` (one QR PNG per code) and `--csv <file>`. `--all` includes already claimed codes, `--fallback` puts the HTTPS fallback URL into QR images and cards instead of the wallet deep link
+- `end <campaign>` ends a campaign and refunds unclaimed credits. `--wait` keeps retrying while payouts are settling
+- `pause <campaign>` and `resume <campaign>` pause and resume a campaign
 
 ## Exit codes
 

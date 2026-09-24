@@ -1,8 +1,8 @@
 import { apiRequest, ApiError, requireToken, sleep } from '../api.js';
 import { resolveApi, webCreateUrl } from '../config.js';
 import { print, table, formatAda } from '../output.js';
-import { MAX_PAGES } from './campaign-codes.js';
-import type { CampaignGetResponseBody, CampaignListItem, CampaignListResponseBody, TokenBundleItem, TokenMeta } from '../api-types.js';
+import { loadCampaigns } from '../campaigns.js';
+import type { CampaignGetResponseBody, CampaignListItem, TokenBundleItem, TokenMeta } from '../api-types.js';
 
 const DEFAULT_END_WAIT_MS = 20_000;
 const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
@@ -15,7 +15,7 @@ const DEFAULT_END_WAIT_TIMEOUT_MS = 900_000;
 export function campaignCreateMoved(opts: { api?: string; json: boolean }): never {
   const createUrl = webCreateUrl(resolveApi(opts.api));
   if (opts.json) print({ createUrl }, { json: true });
-  throw new Error(`Campaigns are created in the web interface at ${createUrl}, export the codes afterwards with "claimpaign codes <id>".`);
+  throw new Error(`Campaigns are created in the web interface at ${createUrl}, export the codes afterwards with "claimpaign codes <campaign>".`);
 }
 
 /** Statuses `list` leaves out unless --all, a failed creation counts as ended. */
@@ -54,22 +54,7 @@ function perClaimLabel(c: CampaignListItem, tokenMeta: TokenMeta): string {
 
 /** Lists sandbox campaigns across all pages, ended ones only with all. */
 export async function campaignList(opts: { api?: string; json: boolean; all?: boolean }): Promise<void> {
-  const token = requireToken();
-  const api = resolveApi(opts.api);
-
-  const loaded: CampaignListItem[] = [];
-  const tokenMeta: TokenMeta = {};
-  let page = 1;
-  for (;;) {
-    const { body } = await apiRequest<CampaignListResponseBody>({
-      api, token, method: 'GET', path: `/api/admin/campaigns?limit=100&page=${page}`,
-    });
-    loaded.push(...body.campaigns);
-    Object.assign(tokenMeta, body.tokenMeta);
-    if (!Number.isFinite(body.pages) || page >= body.pages || page >= MAX_PAGES) break;
-    page += 1;
-  }
-
+  const { campaigns: loaded, tokenMeta } = await loadCampaigns(opts.api);
   const campaigns = opts.all ? loaded : loaded.filter(c => !HIDDEN_UNLESS_ALL.has(c.status));
 
   if (opts.json) {

@@ -1,15 +1,10 @@
 import { apiRequest, requireToken } from '../api.js';
 import { resolveApi } from '../config.js';
+import { MAX_PAGES } from '../campaigns.js';
 import { print, table } from '../output.js';
 import { buildClaimUri, buildFallbackUri, splitFullCode } from '../codes.js';
 import { writeCsv, writeQrImages, writePdf, type ExportItem } from '../export.js';
 import type { CampaignCode, CampaignFields, CampaignGetResponseBody } from '../api-types.js';
-
-/**
- * Safety cap on paginated fetches, in case a server response carries a bad or huge
- * pages value. Shared with campaign.ts's own pagination loop over the campaign list.
- */
-export const MAX_PAGES = 1000;
 
 /** Column order for the codes CSV export. */
 const CSV_COLUMNS = ['code', 'status', 'claim_uri', 'fallback_url'];
