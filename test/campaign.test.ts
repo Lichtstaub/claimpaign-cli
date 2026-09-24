@@ -57,19 +57,28 @@ describe('campaign create', () => {
 });
 
 describe('campaign list', () => {
+  const row = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+    id, name: id, status, total_codes: 10, codes_claimed: 0, code_prefix: 'P', code_mode: 'unique', network: 'preprod', created_at: '2026-01-01',
+    ada_per_claim: 10_000_000, campaign_type: 'ada', token_bundle: null, has_tokens: 0, has_nft: 0, ...extra,
+  });
+
+  const listFake = (campaigns: unknown[], tokenMeta: unknown = null) => startFakeApi({
+    'GET /api/admin/campaigns': () => ({ status: 200, body: { campaigns, total: campaigns.length, page: 1, limit: 100, pages: 1, tokenMeta } }),
+  });
+
+  const listedIds = () => JSON.parse(output.join('')).campaigns.map((c: { id: string }) => c.id);
+
   it('loads two pages and shows every row', async () => {
     const thisFake = await startFakeApi({
       'GET /api/admin/campaigns': req => {
         const page = Number(req.url.searchParams.get('page') || '1');
-        if (page === 1) {
-          return { status: 200, body: { campaigns: [{ id: 'c1', name: 'One', status: 'active', total_codes: 10, codes_claimed: 2, code_prefix: 'ONE1', code_mode: 'unique', network: 'preprod', created_at: '2026-01-01' }], total: 2, page: 1, limit: 100, pages: 2 } };
-        }
-        return { status: 200, body: { campaigns: [{ id: 'c2', name: 'Two', status: 'ended', total_codes: 5, codes_claimed: 5, code_prefix: 'TWO1', code_mode: 'unique', network: 'preprod', created_at: '2026-01-02' }], total: 2, page: 2, limit: 100, pages: 2 } };
+        const campaigns = page === 1 ? [row('c1', 'active', { codes_claimed: 2 })] : [row('c2', 'ended', { total_codes: 5, codes_claimed: 5 })];
+        return { status: 200, body: { campaigns, total: 2, page, limit: 100, pages: 2 } };
       },
     });
     fake = thisFake;
 
-    await campaignList({ api: thisFake.url, json: false });
+    await campaignList({ api: thisFake.url, json: false, all: true });
     const text = output.join('');
     expect(text).toContain('c1');
     expect(text).toContain('c2');
@@ -78,9 +87,62 @@ describe('campaign list', () => {
     expect(thisFake.calls.filter(c => c.method === 'GET').length).toBe(2);
 
     output = [];
-    await campaignList({ api: thisFake.url, json: true });
-    const parsed = JSON.parse(output.join(''));
-    expect(parsed.campaigns.map((c: { id: string }) => c.id)).toEqual(['c1', 'c2']);
+    await campaignList({ api: thisFake.url, json: true, all: true });
+    expect(listedIds()).toEqual(['c1', 'c2']);
+  });
+
+  it('hides ended and failed campaigns unless all is set, and says how many are hidden', async () => {
+    fake = await listFake([row('live', 'active'), row('held', 'paused'), row('done', 'ended'), row('broken', 'creation_failed')]);
+
+    await campaignList({ api: fake.url, json: false });
+    const text = output.join('');
+    expect(text).toContain('live');
+    expect(text).toContain('held');
+    expect(text).not.toContain('done');
+    expect(text).not.toContain('broken');
+    expect(errOutput.join('')).toContain('2 ended campaigns not shown, "claimpaign list --all" includes them');
+
+    output = []; errOutput = [];
+    await campaignList({ api: fake.url, json: false, all: true });
+    expect(output.join('')).toContain('done');
+    expect(output.join('')).toContain('broken');
+    expect(errOutput.join('')).toBe('');
+  });
+
+  it('filters the json output the same way', async () => {
+    fake = await listFake([row('live', 'active'), row('done', 'ended')]);
+
+    await campaignList({ api: fake.url, json: true });
+    expect(listedIds()).toEqual(['live']);
+    expect(errOutput.join('')).toBe('');
+
+    output = [];
+    await campaignList({ api: fake.url, json: true, all: true });
+    expect(listedIds()).toEqual(['live', 'done']);
+  });
+
+  it('prints an empty table and the hidden count when no campaign is running', async () => {
+    fake = await listFake([row('done', 'ended')]);
+    await campaignList({ api: fake.url, json: false });
+    expect(output.join('')).toBe('(none)\n');
+    expect(errOutput.join('')).toContain('1 ended campaign not shown, "claimpaign list --all" includes it');
+  });
+
+  it('shows what one claim pays, with the token floor, token amounts and nfts', async () => {
+    const usdm = 'aa11.7455534d'; // asset name hex of "tUSDM"
+    const mystery = 'bb22.4d59535445525930'; // asset name hex of "MYSTERY0", not in tokenMeta
+    fake = await listFake([
+      row('adaonly', 'active', { ada_per_claim: 10_000_000 }),
+      row('tokens', 'active', { campaign_type: 'token', ada_per_claim: 0, has_tokens: 1, token_bundle: JSON.stringify([{ unit: usdm, quantity: '100000000' }, { unit: mystery, quantity: '5' }]) }),
+      row('nft', 'active', { campaign_type: 'nft', ada_per_claim: 3_500_000, has_nft: 1 }),
+    ], { [usdm]: { ticker: 'tUSDM', decimals: 6 } });
+
+    await campaignList({ api: fake.url, json: false });
+    const lines = output.join('').split('\n');
+    expect(lines[0]).toContain('per claim');
+    expect(lines.find(l => l.startsWith('adaonly'))).toContain('10.00 tADA');
+    expect(lines.find(l => l.startsWith('tokens'))).toContain('2.00 tADA + 100 tUSDM + 5 MYSTERY0');
+    expect(lines.find(l => l.startsWith('nft'))).toContain('3.50 tADA + NFT');
   });
 
   it('throws Not logged in without a stored token', async () => {

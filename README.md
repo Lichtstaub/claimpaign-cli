@@ -73,7 +73,7 @@ For organizers, all with an API key except `deposit` and `create`:
 - `balance` shows the sandbox credit balance
 - `deposit` shows how to add sandbox credits
 - `create` prints the link to the web interface, campaigns are created there
-- `list` lists your sandbox campaigns
+- `list` lists your running sandbox campaigns and what one claim pays. `--all` includes ended campaigns
 - `status <id>` shows a campaign's status, progress and claim queue
 - `codes <id>` prints the unclaimed codes of a campaign, or exports them with `--pdf <file>` (print-ready cards), `--qr-dir <dir>` (one QR PNG per code) and `--csv <file>`. `--all` includes already claimed codes, `--fallback` puts the HTTPS fallback URL into QR images and cards instead of the wallet deep link
 - `end <id>` ends a campaign and refunds unclaimed credits. `--wait` keeps retrying while payouts are settling
@@ -96,7 +96,7 @@ Every command accepts a top level `--json` flag, which prints the shape below in
 - `balance` `{ credits: <raw org credits body> }`
 - `deposit` `{ topupUrl, faucetUrl }`
 - `create` `{ createUrl }`, printed before the command exits with an error
-- `list` `{ campaigns: [...] }`
+- `list` `{ campaigns: [...] }`, running campaigns only unless `--all`
 - `status` the raw campaign GET body, `{ campaign, codes, queue, pagination }`
 - `codes` without `--csv`/`--qr-dir`/`--pdf`, `{ campaign: { id, name, codePrefix }, codes: [{ code, status, claim_uri, fallback_url }] }`
 - `codes` with `--csv`/`--qr-dir`/`--pdf`, `{ csv?, qrDir?, pdf?, count }`

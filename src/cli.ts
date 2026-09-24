@@ -63,10 +63,11 @@ export function buildProgram(): Command {
 
   program
     .command('list')
-    .description('List sandbox (preprod) campaigns')
-    .action(async () => {
+    .description('List running sandbox (preprod) campaigns and what one claim pays')
+    .option('--all', 'include ended campaigns', false)
+    .action(async (cmdOpts: { all: boolean }) => {
       const opts = program.opts<{ api?: string; json: boolean }>();
-      await campaignList({ api: opts.api, json: opts.json });
+      await campaignList({ api: opts.api, json: opts.json, all: cmdOpts.all });
     });
 
   program

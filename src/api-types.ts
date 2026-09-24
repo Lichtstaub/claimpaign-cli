@@ -55,8 +55,19 @@ export interface CampaignListItem {
   code_mode: string;
   network: string;
   created_at: string;
+  /** Lovelace per claim, before the min UTxO floor of token and NFT campaigns. */
+  ada_per_claim?: number;
+  campaign_type?: string;
+  /** Tokens per claim as a JSON array of TokenBundleItem, stored as a string. */
+  token_bundle?: string | null;
+  has_tokens?: number;
+  has_nft?: number;
   [key: string]: unknown;
 }
+
+export interface TokenBundleItem { unit: string; quantity: string }
+
+export type TokenMeta = Record<string, { ticker: string; decimals: number }>;
 
 /** GET /api/admin/campaigns response. */
 export interface CampaignListResponseBody {
@@ -65,4 +76,6 @@ export interface CampaignListResponseBody {
   page: number;
   limit: number;
   pages: number;
+  /** Ticker and decimals of the tokens in this page's campaigns, null when none are known. */
+  tokenMeta?: TokenMeta | null;
 }
