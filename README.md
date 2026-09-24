@@ -74,6 +74,20 @@ The CLI stores its login in `~/.config/claimpaign/config.json` (mode 0600).
 - `CLAIMPAIGN_TOKEN` sandbox (preprod) API key, overrides the stored one and skips the login prompt
 - `CLAIMPAIGN_CONFIG_DIR` directory for `config.json`, default `~/.config/claimpaign`
 
+The key sits in that file in plain text, readable only by your user. To keep it off the disk, store it in a password manager, skip `claimpaign login` and hand the key over through `CLAIMPAIGN_TOKEN` on each call, for example with the 1Password CLI (adjust the reference to your vault):
+
+```
+CLAIMPAIGN_TOKEN=$(op read "op://Private/Claimpaign/credential") claimpaign list
+```
+
+Or with the macOS Keychain, after storing the key once with `security add-generic-password -s claimpaign -a sandbox -w`, which prompts for it:
+
+```
+CLAIMPAIGN_TOKEN=$(security find-generic-password -s claimpaign -a sandbox -w) claimpaign list
+```
+
+`claimpaign logout` removes a key that is already stored in the config file.
+
 ## Development
 
 From a checkout: `npm install && npm run build`, then `node dist/bin.js --help`, or `npm link` once to get the `claimpaign` command. `npx claimpaign` only works with the published package.
