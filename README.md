@@ -1,46 +1,83 @@
 # claimpaign
 
-Command line tool for Claimpaign sandbox (preprod) campaigns and CIP-99 testnet claims. It is made for events like hackathons, workshops and school classes where many people need preprod ada or test tokens quickly: the organizer creates a campaign in the web interface, exports its codes or QR cards from the terminal and hands them out, participants claim without owning a wallet yet, and test tokens such as tUSDM can be handed out the same way. It also claims CIP-99 codes from other faucets to any Cardano testnet address.
+Command line tool for Claimpaign sandbox (preprod) campaigns and CIP-99 testnet claims. It is made for hackathons, workshops and school classes where many people need preprod ada or test tokens such as tUSDM quickly. Participants claim their code with a single command. Organizers create the campaign in the web interface and use the terminal to export codes, follow the claims and end the campaign.
+
+**Guide:** a more readable version of this page is at https://claimpaign.com/docs/cli/ (also in [Deutsch](https://claimpaign.com/de/docs/cli/), [Español](https://claimpaign.com/es/docs/cli/) and [日本語](https://claimpaign.com/ja/docs/cli/)). This README is the full reference, the rest of the Claimpaign documentation is at https://claimpaign.com/docs.
 
 ## Install
+
+The tool needs Node.js 20 or newer. Run it without installing:
 
 ```
 npx claimpaign --help
 ```
 
-Or install it globally:
+Or install it globally with `npm install -g claimpaign`. The examples below use the installed `claimpaign` command. With npx, write `npx claimpaign` instead.
+
+## For participants: claim a code
+
+Claiming needs no account and no API key. Pass the code from your card and your testnet address:
 
 ```
-npm install -g claimpaign
+claimpaign claim SUMMIT_7K3MQ9XZ4H addr_test1q...
 ```
 
-## Login
+A scanned claim link works as well. Put it in quotes, since it contains characters your shell would otherwise interpret:
 
-Run `claimpaign login` and paste your sandbox (preprod) API key when prompted. Get a key from Settings, Sandbox API on claimpaign.com, it looks like `cps_` followed by 40 characters. Setting `CLAIMPAIGN_TOKEN` skips `claimpaign login` entirely, every command reads it before anything else. `claimpaign login` itself always prompts for a key even when the variable is set, its whole purpose is storing a key in the config file.
+```
+claimpaign claim "web+cardano://claim/v1?faucet_url=...&code=..." addr_test1q...
+```
+
+The tool also claims from other CIP-99 faucets on preprod or preview. For a bare code from another faucet, add its URL with `--faucet`:
+
+```
+claimpaign claim CODE addr_test1q... --faucet https://example.com/claim
+```
+
+Only testnet addresses (`addr_test...`) are accepted. Campaigns with a per wallet limit also need an address with a staking part. The receive address your wallet shows always has one.
+
+## For organizers
+
+### Log in with an API key
+
+1. Open [Settings, Sandbox API](https://claimpaign.com/admin/settings/#sandbox-api) on claimpaign.com
+2. Create a key and copy it. It is shown only once and looks like `cps_` followed by 40 characters
+3. Run `claimpaign login` and paste the key
 
 <img width="800" alt="api-key-settings" src="https://github.com/user-attachments/assets/4c347ed5-eeb6-4fdf-8bf7-3cab5e380b3b" />
 
+Keep the key secret like a password. You can revoke it in the same settings tab at any time. [Configuration](#configuration) shows how to keep it in a password manager instead of the config file.
 
-## Hackathon flow
+API keys only work in the Claimpaign sandbox (Cardano preprod). The server never lets a key touch mainnet, so production campaigns are managed in the web interface only.
 
-1. Top up sandbox (preprod) credits and create the campaign in the web interface at https://claimpaign.com/admin/create/. `claimpaign deposit` shows the links. Test tokens such as tUSDM are paid with credits when the campaign is created.
-2. `claimpaign list` shows the campaign id.
-3. `claimpaign codes <id> --qr-dir ./qr --pdf codes.pdf` prints QR codes and a cut sheet PDF, `--csv codes.csv` exports the codes.
+### Run an event
+
+1. Top up sandbox credits and create the campaign in the web interface at https://claimpaign.com/admin/create/. `claimpaign deposit` shows the links. Test tokens such as tUSDM are paid with credits when the campaign is created.
+2. Find the campaign id with `claimpaign list`.
+3. Export the codes as a print-ready PDF with one card per code: `claimpaign codes <id> --pdf codes.pdf`. `--qr-dir ./qr` writes one QR image per code, `--csv codes.csv` a CSV file.
 4. Hand out the codes, on paper or as QR images.
-5. `claimpaign status <id>` shows how many codes are claimed.
-6. `claimpaign end <id>` ends the campaign and refunds unclaimed credits.
+5. Check how many codes are claimed while the event runs: `claimpaign status <id>`.
+6. End the campaign afterwards to get the credits of unclaimed codes back: `claimpaign end <id>`.
 
-`claimpaign create` does not create campaigns, it prints the link to the web interface.
+## Commands
 
-## For participants
+`claimpaign --help` lists all commands, `claimpaign <command> --help` shows the options of one command. Every command accepts `--api <url>` and `--json`.
 
-```
-claimpaign claim <uri-or-code> <addr_test...>
-```
+For participants, no API key needed:
 
-Works with a scanned CIP-99 claim URI, or a bare code together with `--faucet <url>`. Also works against other CIP-99 faucets, not just Claimpaign campaigns.
+- `claim <uri-or-code> <address>` claims a CIP-99 code to a testnet address. `--faucet <url>` posts a bare code to another CIP-99 faucet
 
-Every command that uses an API key works on the Claimpaign sandbox (preprod) only, the server never lets a key touch mainnet. `claim` needs no key and accepts testnet addresses (`addr_test`) only, so it works with any CIP-99 faucet on preprod or preview.
+For organizers, all with an API key except `deposit` and `create`:
+
+- `login` stores a sandbox (preprod) API key, `logout` removes it
+- `balance` shows the sandbox credit balance
+- `deposit` shows how to add sandbox credits
+- `create` prints the link to the web interface, campaigns are created there
+- `list` lists your sandbox campaigns
+- `status <id>` shows a campaign's status, progress and claim queue
+- `codes <id>` prints the unclaimed codes of a campaign, or exports them with `--pdf <file>` (print-ready cards), `--qr-dir <dir>` (one QR PNG per code) and `--csv <file>`. `--all` includes already claimed codes, `--fallback` puts the HTTPS fallback URL into QR images and cards instead of the wallet deep link
+- `end <id>` ends a campaign and refunds unclaimed credits. `--wait` keeps retrying while payouts are settling
+- `pause <id>` and `resume <id>` pause and resume a campaign
 
 ## Exit codes
 
@@ -53,6 +90,7 @@ Every command that uses an API key works on the Claimpaign sandbox (preprod) onl
 
 Every command accepts a top level `--json` flag, which prints the shape below instead of the human readable text. Fields marked `?` are only present when the value applies.
 
+- `claim` the raw faucet response body, `{ code, status, message?, lovelaces?, tokens?, queue_position? }`, printed even when the claim is not accepted, before the command exits with an error
 - `login` no stdout output, only the exit code and the stored config change
 - `logout` no stdout output, only the exit code and the stored config change
 - `balance` `{ credits: <raw org credits body> }`
@@ -64,7 +102,6 @@ Every command accepts a top level `--json` flag, which prints the shape below in
 - `codes` with `--csv`/`--qr-dir`/`--pdf`, `{ csv?, qrDir?, pdf?, count }`
 - `end` the raw endpoint body, `{ ok, status, refunded? }`
 - `pause` / `resume` the raw endpoint body, `{ ok, status }`
-- `claim` the raw faucet response body, `{ code, status, message?, lovelaces?, tokens?, queue_position? }`, printed even when the claim is not accepted, before the command exits with an error
 
 ## Configuration
 
@@ -73,6 +110,22 @@ The CLI stores its login in `~/.config/claimpaign/config.json` (mode 0600).
 - `CLAIMPAIGN_API` API base URL, overrides the stored one and the default `https://claimpaign.com`
 - `CLAIMPAIGN_TOKEN` sandbox (preprod) API key, overrides the stored one and skips the login prompt
 - `CLAIMPAIGN_CONFIG_DIR` directory for `config.json`, default `~/.config/claimpaign`
+
+Setting `CLAIMPAIGN_TOKEN` skips `claimpaign login` entirely, every command reads it before anything else. `claimpaign login` itself always prompts for a key even when the variable is set, its whole purpose is storing a key in the config file.
+
+The key sits in `config.json` in plain text, readable only by your user. To keep it off the disk, store it in a password manager, skip `claimpaign login` and hand the key over through `CLAIMPAIGN_TOKEN` on each call, for example with the 1Password CLI (adjust the reference to your vault):
+
+```
+CLAIMPAIGN_TOKEN=$(op read "op://Private/Claimpaign/credential") claimpaign list
+```
+
+Or with the macOS Keychain, after storing the key once with `security add-generic-password -s claimpaign -a sandbox -w`, which prompts for it:
+
+```
+CLAIMPAIGN_TOKEN=$(security find-generic-password -s claimpaign -a sandbox -w) claimpaign list
+```
+
+`claimpaign logout` removes a key that is already stored in the config file.
 
 ## Development
 
@@ -93,10 +146,6 @@ Releases are published to npm by the release workflow, never from a local machin
 3. Approve the staged version on npmjs.com under Staged Packages (asks for 2FA). Only then is it installable.
 
 The workflow checks that the tag matches `package.json` and sits on `main`, runs typecheck, tests and build, stages the version on npm with provenance and creates the GitHub release. If the workflow fails after staging, approve the staged version first and then rerun it, it skips npm when that version already came from the same commit.
-
-## Documentation
-
-https://claimpaign.com/docs
 
 ## License
 
