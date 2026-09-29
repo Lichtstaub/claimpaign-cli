@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/Lichtstaub/claimpaign-cli/main/media/logo.png" width="96" height="96" alt="Claimpaign logo: a gift box on a parachute">
+
 # claimpaign
 
 Command line tool for Claimpaign sandbox (preprod) campaigns and CIP-99 testnet claims. It is made for hackathons, workshops and school classes where many people need preprod ada or test tokens such as tUSDM quickly. Participants claim their code with a single command. Organizers create the campaign in the web interface and use the terminal to export codes, follow the claims and end the campaign.
