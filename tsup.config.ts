@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig, type Options } from 'tsup';
 
@@ -24,7 +24,10 @@ const thirdPartyLicenses: EsbuildPlugin = {
         if (!file) throw new Error(`${pkg.name} is bundled but ships no license file`);
         return `${pkg.name}@${pkg.version}\nLicense: ${pkg.license ?? 'see below'}\n\n${readFileSync(join(dir, file), 'utf8').trim()}\n`;
       });
-      writeFileSync(join(build.initialOptions.outdir ?? 'dist', 'THIRD_PARTY_LICENSES.txt'), sections.join(`\n${'-'.repeat(72)}\n\n`));
+      // onEnd runs before tsup writes the bundle, so on a fresh checkout the folder does not exist yet
+      const outdir = build.initialOptions.outdir ?? 'dist';
+      mkdirSync(outdir, { recursive: true });
+      writeFileSync(join(outdir, 'THIRD_PARTY_LICENSES.txt'), sections.join(`\n${'-'.repeat(72)}\n\n`));
     });
   },
 };
