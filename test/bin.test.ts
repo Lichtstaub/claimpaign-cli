@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -31,6 +31,13 @@ describe('installed binary', () => {
       const r = spawnSync(bin, ['--version'], { encoding: 'utf8' });
       expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(version);
+
+      // qrcode and pdf-lib are bundled, so they are not installed but their licenses ship
+      expect(existsSync(join(probeDir, 'node_modules', 'qrcode'))).toBe(false);
+      expect(existsSync(join(probeDir, 'node_modules', 'pdf-lib'))).toBe(false);
+      const notices = readFileSync(join(probeDir, 'node_modules', 'claimpaign', 'dist', 'THIRD_PARTY_LICENSES.txt'), 'utf8');
+      expect(notices).toMatch(/^qrcode@\d/m);
+      expect(notices).toMatch(/^pdf-lib@\d/m);
     } finally {
       rmSync(packDir, { recursive: true, force: true });
       rmSync(probeDir, { recursive: true, force: true });
