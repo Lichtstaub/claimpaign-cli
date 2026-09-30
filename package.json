@@ -1,7 +1,19 @@
 {
   "name": "claimpaign",
   "version": "0.4.1",
-  "description": "Command line tool for Claimpaign sandbox campaigns and CIP-99 claims",
+  "description": "Hand out preprod ada and test tokens like tUSDM at Cardano hackathons and workshops. CLI for Claimpaign sandbox campaigns and CIP-99 claims.",
+  "keywords": [
+    "cardano",
+    "cli",
+    "faucet",
+    "testnet",
+    "preprod",
+    "cip-99",
+    "hackathon",
+    "workshop",
+    "tusdm",
+    "claimpaign"
+  ],
   "type": "module",
   "bin": {
     "claimpaign": "dist/bin.js"
